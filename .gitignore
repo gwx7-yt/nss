@@ -1,0 +1,17 @@
+__pycache__/
+.vscode/
+
+# Things for PyPi project
+dist/
+build/
+nepse_api.egg-info/
+
+#Test
+test/
+nepse/__main__.py
+.pytest_cache/
+
+# Docs
+docs/_build/
+docs/_static/
+docs/_templates/
