@@ -5,4 +5,4 @@ tqdm==4.66.5
 gunicorn==20.1.0
 Flask-Cors==4.0.0
 git+https://github.com/basic-bgnr/NepseUnofficialApi.git
-
+pandas
