@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NEPSE Beginner Tracker</title>
+  <link rel="stylesheet" href="nss.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header>
+    <div class="header-content">
+      <div class="header-left">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/9/9b/Flag_of_Nepal.svg" alt="Nepal Flag" class="flag" />
+        <h1>📈 NEPSE Beginner Tracker</h1>
+      </div>
+      <div class="header-right">
+        <div class="credits-container">
+          <div class="credits"><strong>💳 Credits: <span id="creditBalance">0</span></strong></div>
+          <div class="credits-info">
+            <span id="dailyBonusStatus" class="bonus-status">🎁 Daily bonus available!</span>
+            <span id="weeklySpinStatus" class="bonus-status">🎰 Weekly spin available!</span>
+          </div>
+        </div>
+        <button id="themeToggle" onclick="toggleTheme()">🌙 Dark Mode</button>
+      </div>
+    </div>
+  </header>
+
+  <nav>
+    <ul>
+      <li><a href="#home">🏠 Home</a></li>
+      <li><a href="#companies">📋 Companies</a></li>
+      <li><a href="#portfolio">💼 Portfolio</a></li>
+      <li><a href="#settings">⚙️ Settings</a></li>
+    </ul>
+  </nav>
+
+  <main>
+    <!-- Home -->
+    <section id="home" class="card">
+      <h2>📊 Market Summary</h2>
+      <div class="table-container">
+        <table id="summaryTable"></table>
+      </div>
+    </section>
+
+    <section id="topSection" class="card">
+      <div class="top-gainers">
+        <h2>📈 Top Gainers</h2>
+        <div class="table-container">
+          <table id="gainersTable"></table>
+        </div>
+      </div>
+      <div class="top-losers">
+        <h2>📉 Top Losers</h2>
+        <div class="table-container">
+          <table id="losersTable"></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>🧪 Simulate a Trade</h2>
+      <form id="tradeForm">
+        <label for="symbol">📦 Stock Symbol (e.g., NTC):</label>
+        <input type="text" id="symbol" required />
+        <label for="amount">💸 Credits to invest:</label>
+        <input type="number" id="amount" required min="1" />
+        <button type="submit">✅ Invest</button>
+      </form>
+      <p id="tradeResult"></p>
+    </section>
+
+    <section class="card">
+      <h2>📉 NEPSE Index Chart</h2>
+      <div class="chart-container">
+        <canvas id="indexChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Companies -->
+    <section id="companies" class="card">
+      <h2>🏢 All Stocks</h2>
+      <div class="table-container">
+        <table id="allStocksTable">
+          <thead>
+            <tr><th>Symbol</th><th>Price</th><th>Change (%)</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Portfolio -->
+    <section id="portfolio" class="card">
+      <h2>💼 Portfolio Overview</h2>
+      <div class="portfolio-summary">
+        <p><strong>Total Invested:</strong> <span id="totalInvested">0</span> credits</p>
+        <p><strong>📈 Profit/Loss:</strong> <span id="totalPnL">0</span> credits</p>
+      </div>
+
+      <h3>📜 Investment History</h3>
+      <div class="table-container">
+        <table id="investmentHistory">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Buy Price</th>
+              <th>Current Price</th>
+              <th>Quantity</th>
+              <th>P/L (credits)</th>
+              <th>P/L (%)</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="settings" class="card">
+      <h2>⚙️ Settings</h2>
+      <div class="settings-container">
+        <div class="settings-group">
+          <h3>🎨 Appearance</h3>
+          <div class="setting-item">
+            <label for="themeToggle">Dark Mode</label>
+            <div class="toggle-switch">
+              <input type="checkbox" id="themeToggle">
+              <span class="slider"></span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <label for="fontSize">Font Size</label>
+            <select id="fontSize">
+              <option value="small">Small</option>
+              <option value="medium" selected>Medium</option>
+              <option value="large">Large</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Credits Section -->
+    <section id="credits" class="card">
+      <h2>💰 Credit System</h2>
+      <div class="credits-actions">
+        <div class="credit-action">
+          <h3>🎁 Daily Bonus</h3>
+          <p>Get 500 credits every day you log in!</p>
+          <button id="claimDailyBonus" class="action-button">Claim Daily Bonus</button>
+        </div>
+        <div class="credit-action">
+          <h3>📺 Watch Ad</h3>
+          <p>Watch an ad to earn 500 credits!</p>
+          <button id="watchAd" class="action-button">Watch Ad</button>
+        </div>
+        <div class="credit-action">
+          <h3>🎰 Weekly Spin</h3>
+          <p>Spin the wheel every weekend for a chance to win up to 5000 credits!</p>
+          <button id="weeklySpin" class="action-button">Spin Now</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="nss.js"></script>
+</body>
+</html>
