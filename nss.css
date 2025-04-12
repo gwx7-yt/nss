@@ -298,7 +298,6 @@ button:hover {
   margin: auto;
 }
 
-/* Settings Section */
 .settings-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -342,7 +341,6 @@ button:hover {
   margin-right: 1rem;
 }
 
-/* Toggle Switch */
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -388,7 +386,6 @@ input:checked + .slider:before {
   transform: translateX(26px);
 }
 
-/* Select and Button Styles */
 .setting-item select {
   padding: 0.5rem;
   border-radius: 8px;
@@ -422,7 +419,6 @@ input:checked + .slider:before {
   background-color: #ff0000;
 }
 
-/* Responsive Design */
 @media (max-width: 768px) {
   .settings-container {
     grid-template-columns: 1fr;
@@ -453,7 +449,6 @@ input:checked + .slider:before {
   }
 }
 
-/* Credits System */
 .credits-container {
   display: flex;
   flex-direction: column;
@@ -554,7 +549,6 @@ input:checked + .slider:before {
   transform: none;
 }
 
-/* Spin Wheel Animation */
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
@@ -563,8 +557,6 @@ input:checked + .slider:before {
 .spinning {
   animation: spin 2s ease-out;
 }
-
-/* Responsive Design */
 @media (max-width: 768px) {
   .header-content {
     flex-direction: column;
