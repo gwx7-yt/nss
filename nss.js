@@ -240,7 +240,7 @@ function loadInvestmentHistory() {
   investments.forEach((inv, index) => {
     console.log("Processing investment:", inv);
 
-    fetch(`http://localhost:8000/StockPrice?symbol=${inv.symbol}`)
+    fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${inv.symbol}`)
       .then(res => res.json())
       .then(data => {
         console.log("API Response for", inv.symbol, ":", data);
@@ -332,7 +332,7 @@ function sellInvestment(index) {
   const investments = JSON.parse(localStorage.getItem("investments")) || [];
   const inv = investments[index];
 
-  fetch(`http://localhost:8000/StockPrice?symbol=${inv.symbol}`)
+  fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${inv.symbol}`)
     .then(res => res.json())
     .then(data => {
       if (data.error) {
@@ -360,7 +360,7 @@ function sellInvestment(index) {
 }
 
 function loadAllStocks() {
-  fetch("http://localhost:8000/AllStocks")
+  fetch("https://nss-c26z.onrender.com/AllStocks")
     .then(res => res.json())
     .then(data => {
       const table = document.getElementById("allStocksTable").getElementsByTagName('tbody')[0];
