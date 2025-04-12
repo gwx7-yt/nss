@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initTheme();
   initSettings();
   
-  // Add event listeners for credit actions
+ 
   document.getElementById('claimDailyBonus').addEventListener('click', claimDailyBonus);
   document.getElementById('watchAd').addEventListener('click', watchAd);
   document.getElementById('weeklySpin').addEventListener('click', weeklySpin);
@@ -86,22 +86,19 @@ function fetchNepseIndex() {
 }
 
 function initCredits() {
-  // Initialize credits if not exists
+
   if (!localStorage.getItem('credits')) {
-    localStorage.setItem('credits', '2000'); // Starter pack
+    localStorage.setItem('credits', '2000'); 
   }
 
-  // Initialize last bonus claim date if not exists
   if (!localStorage.getItem('lastBonusClaim')) {
     localStorage.setItem('lastBonusClaim', new Date().toISOString());
   }
 
-  // Initialize last spin date if not exists
   if (!localStorage.getItem('lastSpinDate')) {
     localStorage.setItem('lastSpinDate', new Date().toISOString());
   }
 
-  // Initialize ad watch count if not exists
   if (!localStorage.getItem('adWatchCount')) {
     localStorage.setItem('adWatchCount', '0');
   }
@@ -121,7 +118,6 @@ function updateBonusStatus() {
   const now = new Date();
   const dailyBonusStatus = document.getElementById('dailyBonusStatus');
   
-  // Check if 24 hours have passed since last claim
   if (now - lastClaim >= 24 * 60 * 60 * 1000) {
     dailyBonusStatus.textContent = '🎁 Daily bonus available!';
     dailyBonusStatus.style.color = 'var(--gain-color)';
@@ -137,7 +133,7 @@ function updateSpinStatus() {
   const now = new Date();
   const weeklySpinStatus = document.getElementById('weeklySpinStatus');
   
-  // Check if it's weekend and spin hasn't been used this week
+
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const isNewWeek = now - lastSpin >= 7 * 24 * 60 * 60 * 1000;
   
@@ -168,7 +164,7 @@ function claimDailyBonus() {
 }
 
 function watchAd() {
-  // Simulate ad watching
+
   const adButton = document.getElementById('watchAd');
   adButton.disabled = true;
   adButton.textContent = 'Watching ad...';
@@ -184,7 +180,7 @@ function watchAd() {
     adButton.disabled = false;
     adButton.textContent = 'Watch Ad';
     alert('🎉 Ad watched! +500 credits');
-  }, 5000); // Simulate 5-second ad
+  }, 5000);
 }
 
 function weeklySpin() {
@@ -233,7 +229,6 @@ function loadInvestmentHistory() {
   const tableBody = document.getElementById("investmentHistory").getElementsByTagName('tbody')[0];
   tableBody.innerHTML = "";
 
-  // Calculate total invested and P/L
   let totalInvested = 0;
   let totalPnL = 0;
 
@@ -257,7 +252,7 @@ function loadInvestmentHistory() {
           return;
         }
         
-        // Parse investment data with validation
+ 
         const buyPrice = parseFloat(inv.price);
         const amount = parseFloat(inv.amount);
         const quantity = parseFloat(inv.quantity);
@@ -274,7 +269,6 @@ function loadInvestmentHistory() {
           rawCurrentPrice: data.price
         });
 
-        // Validate numeric values
         if (isNaN(buyPrice) || isNaN(amount) || isNaN(quantity) || isNaN(currentPrice)) {
           console.error("Invalid numeric values for", inv.symbol, ":", {
             buyPrice,
@@ -289,16 +283,13 @@ function loadInvestmentHistory() {
           return;
         }
 
-        // Calculate values
         const currentValue = quantity * currentPrice;
         const profitLoss = currentValue - amount;
         const profitPercent = ((profitLoss / amount) * 100).toFixed(2);
 
-        // Update totals
         totalInvested += amount;
         totalPnL += profitLoss;
 
-        // Create table row
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${inv.symbol}</td>
@@ -311,7 +302,6 @@ function loadInvestmentHistory() {
         `;
         tableBody.appendChild(row);
 
-        // Update summary
         document.getElementById("totalInvested").textContent = totalInvested.toFixed(2);
         document.getElementById("totalPnL").textContent = totalPnL.toFixed(2);
       })
@@ -381,7 +371,6 @@ function loadAllStocks() {
     });
 }
 
-// Theme management
 function initTheme() {
   const savedTheme = localStorage.getItem('theme') || 'light';
   document.body.classList.toggle('dark-mode', savedTheme === 'dark');
@@ -400,23 +389,22 @@ function toggleTheme() {
   }
 }
 
-// Settings Management
 function initSettings() {
-  // Load saved settings from localStorage
+
   const settings = JSON.parse(localStorage.getItem('settings')) || {
     darkMode: false,
     fontSize: 'medium'
   };
 
-  // Apply saved settings
+
   applySettings(settings);
 
-  // Add event listeners
+ 
   const themeToggle = document.getElementById('themeToggle');
   if (themeToggle) {
     themeToggle.addEventListener('change', () => {
       toggleTheme();
-      // Update settings
+     
       const settings = JSON.parse(localStorage.getItem('settings')) || {};
       settings.darkMode = themeToggle.checked;
       localStorage.setItem('settings', JSON.stringify(settings));
@@ -437,14 +425,13 @@ function initSettings() {
 }
 
 function applySettings(settings) {
-  // Apply dark mode
+  
   document.body.classList.toggle('dark-mode', settings.darkMode);
   const themeToggle = document.getElementById('themeToggle');
   if (themeToggle) {
     themeToggle.checked = settings.darkMode;
   }
 
-  // Apply font size
   const fontSize = document.getElementById('fontSize');
   if (fontSize) {
     document.documentElement.style.fontSize = getFontSizeValue(settings.fontSize);
@@ -522,7 +509,7 @@ function resetData() {
   }
 }
 
-// Trade Simulation
+
 document.getElementById("tradeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const symbol = document.getElementById("symbol").value.toUpperCase();
@@ -561,7 +548,7 @@ document.getElementById("tradeForm").addEventListener("submit", (e) => {
       localStorage.setItem("credits", credits.toString());
       updateCreditDisplay();
 
-      // Store investment data with proper numeric values
+     
       const investment = { 
         symbol, 
         amount: amount.toString(),
