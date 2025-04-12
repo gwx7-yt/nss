@@ -4,4 +4,5 @@ httpx[http2]==0.27.2
 tqdm==4.66.5
 gunicorn==20.1.0
 Flask-Cors==4.0.0
-nepse
+git+https://github.com/basic-bgnr/NepseUnofficialApi.git
+
