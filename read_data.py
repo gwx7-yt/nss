@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from nepse_unofficial import Nepse
+from nepse import Nepse
 import pandas as pd
 from datetime import datetime, timedelta
 
