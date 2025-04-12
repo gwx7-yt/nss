@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function fetchSummary() {
-  fetch("http://localhost:8000/Summary")
+  fetch("https://nss-c26z.onrender.com/Summary")
     .then(res => res.json())
     .then(data => {
       const table = document.getElementById("summaryTable");
@@ -32,7 +32,7 @@ function fetchSummary() {
 }
 
 function fetchTopGainers() {
-  fetch("http://localhost:8000/TopGainers")
+  fetch("https://nss-c26z.onrender.com/TopGainers")
     .then(res => res.json())
     .then(data => {
       const table = document.getElementById("gainersTable");
@@ -47,7 +47,7 @@ function fetchTopGainers() {
 }
 
 function fetchTopLosers() {
-  fetch("http://localhost:8000/TopLosers")
+  fetch("https://nss-c26z.onrender.com/TopLosers")
     .then(res => res.json())
     .then(data => {
       const table = document.getElementById("losersTable");
@@ -62,7 +62,7 @@ function fetchTopLosers() {
 }
 
 function fetchNepseIndex() {
-  fetch("http://localhost:8000/Summary")
+  fetch("https://nss-c26z.onrender.com/Summary")
     .then(res => res.json())
     .then(data => {
       const ctx = document.getElementById("indexChart").getContext("2d");
@@ -534,7 +534,7 @@ document.getElementById("tradeForm").addEventListener("submit", (e) => {
     return;
   }
 
-  fetch(`http://localhost:8000/StockPrice?symbol=${symbol}`)
+  fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${symbol}`)
     .then(res => res.json())
     .then(data => {
       console.log("Trade form API response:", data);
