@@ -25,7 +25,7 @@ routes = {
     "CheckProfitLoss": "/checkProfitLoss"
 }
 
-# In-memory storage for simulated trades
+
 simulated_trades = {}
 
 @app.route("/")
@@ -134,7 +134,7 @@ def simulateTrade():
         return jsonify({"error": "Symbol and credits are required"}), 400
 
     try:
-        # Get current stock price
+       
         price_data = nepse.getPriceVolume()
         df = pd.DataFrame(price_data)
         row = df[df["symbol"].str.upper() == symbol.upper()]
@@ -144,10 +144,10 @@ def simulateTrade():
 
         price = float(row["lastTradedPrice"].values[0])
 
-        # Calculate the number of shares the user can buy
+      
         shares = credits / price
 
-        # Store the simulated trade
+     
         simulated_trades[symbol.upper()] = {
             "symbol": symbol.upper(),
             "credits": credits,
@@ -179,12 +179,12 @@ def checkProfitLoss():
         return jsonify({"error": "No simulated trade found for this symbol"}), 404
 
     try:
-        # Ensure at least one day has passed
+    
         time_elapsed = datetime.now() - trade["timestamp"]
         if time_elapsed < timedelta(days=1):
             return jsonify({"error": "You can only check profit/loss after one day"}), 400
 
-        # Get the current stock price
+      
         price_data = nepse.getPriceVolume()
         df = pd.DataFrame(price_data)
         row = df[df["symbol"].str.upper() == symbol.upper()]
@@ -194,7 +194,7 @@ def checkProfitLoss():
 
         current_price = float(row["lastTradedPrice"].values[0])
 
-        # Calculate profit or loss
+    
         profit_loss = (current_price - trade["price"]) * trade["shares"]
         profit_loss_percentage = ((current_price - trade["price"]) / trade["price"]) * 100
 
