@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Nepal Stock Simulator</title>
+  <title>NEPSE Beginner Tracker</title>
   <link rel="stylesheet" href="nss.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -16,13 +16,39 @@
       </div>
       <div class="header-right">
         <div class="credits-container">
-          <div class="credits"><strong>💳 Credits: <span id="creditBalance">0</span></strong></div>
+          <div class="credits">
+            <strong>💳 Credits: <span id="creditBalance">0</span></strong>
+            <button id="showCreditsSection" class="add-credits-btn">+</button>
+          </div>
           <div class="credits-info">
             <span id="dailyBonusStatus" class="bonus-status">🎁 Daily bonus available!</span>
             <span id="weeklySpinStatus" class="bonus-status">🎰 Weekly spin available!</span>
           </div>
         </div>
         <button id="themeToggle" onclick="toggleTheme()">🌙 Dark Mode</button>
+        <div id="loginSection">
+          <button id="loginBtn" class="login-btn">Login</button>
+          <div id="loginModal" class="login-modal">
+            <div class="login-content">
+              <span class="close-modal">&times;</span>
+              <h2>Login to NSS</h2>
+              <form id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Username" required>
+                <input type="password" id="loginPassword" placeholder="Password" required>
+                <button type="submit">Login</button>
+              </form>
+              <div class="social-login">
+                <button class="google-login">Login with Google</button>
+                <button class="facebook-login">Login with Facebook</button>
+              </div>
+              <p>Don't have an account? <a href="#" id="showSignup">Sign up</a></p>
+            </div>
+          </div>
+        </div>
+        <div class="user-profile" id="userProfile" style="display: none;">
+          <img id="profilePicture" src="default-avatar.png" alt="Profile Picture" class="profile-pic">
+          <span id="username">Username</span>
+        </div>
       </div>
     </div>
   </header>
@@ -37,7 +63,7 @@
   </nav>
 
   <main>
- 
+    <!-- Home -->
     <section id="home" class="card">
       <h2>📊 Market Summary</h2>
       <div class="table-container">
@@ -79,6 +105,7 @@
       </div>
     </section>
 
+    <!-- Companies -->
     <section id="companies" class="card">
       <h2>🏢 All Stocks</h2>
       <div class="table-container">
@@ -91,14 +118,14 @@
       </div>
     </section>
 
+    <!-- Portfolio -->
     <section id="portfolio" class="card">
-      <h2>💼 Portfolio Overview</h2>
+      <h2>💼 Portfolio</h2>
       <div class="portfolio-summary">
-        <p><strong>Total Invested:</strong> <span id="totalInvested">0</span> credits</p>
-        <p><strong>📈 Profit/Loss:</strong> <span id="totalPnL">0</span> credits</p>
+        <p>Total Credits Invested: <span id="totalInvested">0.00</span></p>
+        <p>Total Credits Now: <span id="currentValue">0.00</span></p>
+        <p>Total Profit/Loss: <span id="totalPnL">0.00</span></p>
       </div>
-
-      <h3>📜 Investment History</h3>
       <div class="table-container">
         <table id="investmentHistory">
           <thead>
@@ -106,9 +133,11 @@
               <th>Symbol</th>
               <th>Buy Price</th>
               <th>Current Price</th>
+              <th>Credits Invested</th>
+              <th>Credits Now</th>
               <th>Quantity</th>
-              <th>P/L (credits)</th>
-              <th>P/L (%)</th>
+              <th>P/L Amount</th>
+              <th>P/L %</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -117,9 +146,26 @@
       </div>
     </section>
 
+    <!-- Settings -->
     <section id="settings" class="card">
       <h2>⚙️ Settings</h2>
       <div class="settings-container">
+        <div class="settings-group">
+          <h3>👤 Account</h3>
+          <div class="setting-item">
+            <label for="username">Username</label>
+            <input type="text" id="username" placeholder="Enter new username">
+            <button id="updateUsername">Update</button>
+          </div>
+          <div class="setting-item">
+            <label for="profilePicture">Profile Picture</label>
+            <input type="file" id="profilePicture" accept="image/*">
+            <button id="updateProfilePicture">Update</button>
+          </div>
+          <div class="setting-item">
+            <button id="logoutBtn" class="logout-btn">Logout</button>
+          </div>
+        </div>
         <div class="settings-group">
           <h3>🎨 Appearance</h3>
           <div class="setting-item">
@@ -141,13 +187,15 @@
       </div>
     </section>
 
-    <section id="credits" class="card">
-      <h2>💰 Credit System</h2>
+    <!-- Credits Section -->
+    <section id="creditsSection" class="card">
+      <h2>💰 Credit Management</h2>
       <div class="credits-actions">
         <div class="credit-action">
           <h3>🎁 Daily Bonus</h3>
           <p>Get 500 credits every day you log in!</p>
           <button id="claimDailyBonus" class="action-button">Claim Daily Bonus</button>
+          <p id="dailyBonusStatus" class="bonus-status"></p>
         </div>
         <div class="credit-action">
           <h3>📺 Watch Ad</h3>
@@ -156,12 +204,29 @@
         </div>
         <div class="credit-action">
           <h3>🎰 Weekly Spin</h3>
-          <p>Spin the wheel every weekend for a chance to win up to 5000 credits!</p>
+          <p>Spin the wheel once a week for a chance to win up to 5000 credits!</p>
           <button id="weeklySpin" class="action-button">Spin Now</button>
+          <p id="weeklySpinStatus" class="bonus-status"></p>
         </div>
       </div>
     </section>
   </main>
+
+  <!-- Add signup modal -->
+  <div id="signupModal" class="login-modal">
+    <div class="login-content">
+      <span class="close-modal">&times;</span>
+      <h2>Create Account</h2>
+      <form id="signupForm">
+        <input type="text" id="signupUsername" placeholder="Username" required>
+        <input type="email" id="signupEmail" placeholder="Email" required>
+        <input type="password" id="signupPassword" placeholder="Password" required>
+        <input type="password" id="confirmPassword" placeholder="Confirm Password" required>
+        <button type="submit">Sign Up</button>
+      </form>
+      <p>Already have an account? <a href="#" id="showLogin">Login</a></p>
+    </div>
+  </div>
 
   <script src="nss.js"></script>
 </body>

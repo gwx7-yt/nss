@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   fetchSummary();
   fetchTopGainers();
   fetchTopLosers();
@@ -6,14 +6,19 @@ document.addEventListener("DOMContentLoaded", () => {
   initCredits();
   updateCreditDisplay();
   loadAllStocks();
-  loadInvestmentHistory();
   initTheme();
   initSettings();
+  initAuth();
+  await updatePortfolio();
   
- 
-  document.getElementById('claimDailyBonus').addEventListener('click', claimDailyBonus);
-  document.getElementById('watchAd').addEventListener('click', watchAd);
-  document.getElementById('weeklySpin').addEventListener('click', weeklySpin);
+  // Add event listeners for credit actions
+  const claimDailyBonusBtn = document.getElementById('claimDailyBonus');
+  const watchAdBtn = document.getElementById('watchAd');
+  const weeklySpinBtn = document.getElementById('weeklySpin');
+  
+  if (claimDailyBonusBtn) claimDailyBonusBtn.addEventListener('click', claimDailyBonus);
+  if (watchAdBtn) watchAdBtn.addEventListener('click', watchAd);
+  if (weeklySpinBtn) weeklySpinBtn.addEventListener('click', weeklySpin);
 });
 
 function fetchSummary() {
@@ -86,24 +91,52 @@ function fetchNepseIndex() {
 }
 
 function initCredits() {
+  const credits = parseInt(localStorage.getItem('credits') || '2000');
+  updateCreditDisplay();
 
-  if (!localStorage.getItem('credits')) {
-    localStorage.setItem('credits', '2000'); 
-  }
+  // Add credits button functionality
+  const addCreditsBtn = document.querySelector('.add-credits-btn');
+  addCreditsBtn.addEventListener('click', () => {
+    document.getElementById('creditsSection').style.display = 'block';
+  });
 
+  // Update weekly spin to be available any day
+  const weeklySpin = document.getElementById('weeklySpin');
+  weeklySpin.addEventListener('click', () => {
+    const lastSpin = localStorage.getItem('lastSpin');
+    const now = new Date();
+    const canSpin = !lastSpin || (now - new Date(lastSpin)) >= 24 * 60 * 60 * 1000;
+
+    if (canSpin) {
+      const prizes = [0, 100, 200, 500, 1000, 2000, 5000];
+      const prize = prizes[Math.floor(Math.random() * prizes.length)];
+      
+      const currentCredits = parseInt(localStorage.getItem('credits') || '2000');
+      localStorage.setItem('credits', (currentCredits + prize).toString());
+      localStorage.setItem('lastSpin', now.toString());
+      
+      updateCreditDisplay();
+      alert(`Congratulations! You won ${prize} credits!`);
+    } else {
+      alert('You can spin again in 24 hours!');
+    }
+  });
+
+  // Initialize last bonus claim date if not exists
   if (!localStorage.getItem('lastBonusClaim')) {
     localStorage.setItem('lastBonusClaim', new Date().toISOString());
   }
 
+  // Initialize last spin date if not exists
   if (!localStorage.getItem('lastSpinDate')) {
     localStorage.setItem('lastSpinDate', new Date().toISOString());
   }
 
+  // Initialize ad watch count if not exists
   if (!localStorage.getItem('adWatchCount')) {
     localStorage.setItem('adWatchCount', '0');
   }
 
-  updateCreditDisplay();
   updateBonusStatus();
   updateSpinStatus();
 }
@@ -118,6 +151,7 @@ function updateBonusStatus() {
   const now = new Date();
   const dailyBonusStatus = document.getElementById('dailyBonusStatus');
   
+  // Check if 24 hours have passed since last claim
   if (now - lastClaim >= 24 * 60 * 60 * 1000) {
     dailyBonusStatus.textContent = '🎁 Daily bonus available!';
     dailyBonusStatus.style.color = 'var(--gain-color)';
@@ -133,7 +167,7 @@ function updateSpinStatus() {
   const now = new Date();
   const weeklySpinStatus = document.getElementById('weeklySpinStatus');
   
-
+  // Check if it's weekend and spin hasn't been used this week
   const isWeekend = now.getDay() === 0 || now.getDay() === 6;
   const isNewWeek = now - lastSpin >= 7 * 24 * 60 * 60 * 1000;
   
@@ -164,7 +198,7 @@ function claimDailyBonus() {
 }
 
 function watchAd() {
-
+  // Simulate ad watching
   const adButton = document.getElementById('watchAd');
   adButton.disabled = true;
   adButton.textContent = 'Watching ad...';
@@ -180,7 +214,7 @@ function watchAd() {
     adButton.disabled = false;
     adButton.textContent = 'Watch Ad';
     alert('🎉 Ad watched! +500 credits');
-  }, 5000);
+  }, 5000); // Simulate 5-second ad
 }
 
 function weeklySpin() {
@@ -224,131 +258,6 @@ function weeklySpin() {
   }, 2000);
 }
 
-function loadInvestmentHistory() {
-  const investments = JSON.parse(localStorage.getItem("investments")) || [];
-  const tableBody = document.getElementById("investmentHistory").getElementsByTagName('tbody')[0];
-  tableBody.innerHTML = "";
-
-  let totalInvested = 0;
-  let totalPnL = 0;
-
-  investments.forEach((inv, index) => {
-    console.log("Processing investment:", inv);
-
-    fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${inv.symbol}`)
-      .then(res => res.json())
-      .then(data => {
-        console.log("API Response for", inv.symbol, ":", data);
-
-        if (data.error) {
-          console.error("⚠️ Error fetching price for", inv.symbol, ":", data.error);
-          const row = document.createElement("tr");
-          row.innerHTML = `
-            <td>${inv.symbol}</td>
-            <td colspan="5" class="error">Error fetching current price</td>
-            <td><button onclick="sellInvestment(${index})">💸 Sell</button></td>
-          `;
-          tableBody.appendChild(row);
-          return;
-        }
-        
- 
-        const buyPrice = parseFloat(inv.price);
-        const amount = parseFloat(inv.amount);
-        const quantity = parseFloat(inv.quantity);
-        const currentPrice = parseFloat(data.price);
-
-        console.log("Parsed values:", {
-          buyPrice,
-          amount,
-          quantity,
-          currentPrice,
-          rawPrice: inv.price,
-          rawAmount: inv.amount,
-          rawQuantity: inv.quantity,
-          rawCurrentPrice: data.price
-        });
-
-        if (isNaN(buyPrice) || isNaN(amount) || isNaN(quantity) || isNaN(currentPrice)) {
-          console.error("Invalid numeric values for", inv.symbol, ":", {
-            buyPrice,
-            amount,
-            quantity,
-            currentPrice,
-            rawPrice: inv.price,
-            rawAmount: inv.amount,
-            rawQuantity: inv.quantity,
-            rawCurrentPrice: data.price
-          });
-          return;
-        }
-
-        const currentValue = quantity * currentPrice;
-        const profitLoss = currentValue - amount;
-        const profitPercent = ((profitLoss / amount) * 100).toFixed(2);
-
-        totalInvested += amount;
-        totalPnL += profitLoss;
-
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${inv.symbol}</td>
-          <td>${buyPrice.toFixed(2)}</td>
-          <td>${currentPrice.toFixed(2)}</td>
-          <td>${quantity.toFixed(4)}</td>
-          <td class="${profitLoss >= 0 ? 'gain' : 'loss'}">${profitLoss.toFixed(2)}</td>
-          <td class="${profitLoss >= 0 ? 'gain' : 'loss'}">${profitPercent}%</td>
-          <td><button onclick="sellInvestment(${index})">💸 Sell</button></td>
-        `;
-        tableBody.appendChild(row);
-
-        document.getElementById("totalInvested").textContent = totalInvested.toFixed(2);
-        document.getElementById("totalPnL").textContent = totalPnL.toFixed(2);
-      })
-      .catch(error => {
-        console.error("⚠️ Error fetching price for", inv.symbol, ":", error);
-        const row = document.createElement("tr");
-        row.innerHTML = `
-          <td>${inv.symbol}</td>
-          <td colspan="5" class="error">Error fetching current price</td>
-          <td><button onclick="sellInvestment(${index})">💸 Sell</button></td>
-        `;
-        tableBody.appendChild(row);
-      });
-  });
-}
-
-function sellInvestment(index) {
-  const investments = JSON.parse(localStorage.getItem("investments")) || [];
-  const inv = investments[index];
-
-  fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${inv.symbol}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) {
-        alert("❌ Error fetching current price. Please try again.");
-        return;
-      }
-
-      const currentPrice = parseFloat(data.price);
-      const quantity = parseFloat(inv.quantity);
-      const sellAmount = quantity * currentPrice;
-      
-      let credits = parseFloat(localStorage.getItem("credits")) || 0;
-      credits += sellAmount;
-      localStorage.setItem("credits", credits.toString());
-      updateCreditDisplay();
-
-      investments.splice(index, 1);
-      localStorage.setItem("investments", JSON.stringify(investments));
-      loadInvestmentHistory();
-      alert(`✅ Sold ${inv.symbol} for ${sellAmount.toFixed(2)} credits!`);
-    })
-    .catch(() => {
-      alert("❌ Could not complete sale. Please try again.");
-    });
-}
-
 function loadAllStocks() {
   fetch("https://nss-c26z.onrender.com/AllStocks")
     .then(res => res.json())
@@ -371,6 +280,7 @@ function loadAllStocks() {
     });
 }
 
+// Theme management
 function initTheme() {
   const savedTheme = localStorage.getItem('theme') || 'light';
   document.body.classList.toggle('dark-mode', savedTheme === 'dark');
@@ -389,22 +299,23 @@ function toggleTheme() {
   }
 }
 
+// Settings Management
 function initSettings() {
-
+  // Load saved settings from localStorage
   const settings = JSON.parse(localStorage.getItem('settings')) || {
     darkMode: false,
     fontSize: 'medium'
   };
 
-
+  // Apply saved settings
   applySettings(settings);
 
- 
+  // Add event listeners
   const themeToggle = document.getElementById('themeToggle');
   if (themeToggle) {
     themeToggle.addEventListener('change', () => {
       toggleTheme();
-     
+      // Update settings
       const settings = JSON.parse(localStorage.getItem('settings')) || {};
       settings.darkMode = themeToggle.checked;
       localStorage.setItem('settings', JSON.stringify(settings));
@@ -425,13 +336,14 @@ function initSettings() {
 }
 
 function applySettings(settings) {
-  
+  // Apply dark mode
   document.body.classList.toggle('dark-mode', settings.darkMode);
   const themeToggle = document.getElementById('themeToggle');
   if (themeToggle) {
     themeToggle.checked = settings.darkMode;
   }
 
+  // Apply font size
   const fontSize = document.getElementById('fontSize');
   if (fontSize) {
     document.documentElement.style.fontSize = getFontSizeValue(settings.fontSize);
@@ -509,7 +421,7 @@ function resetData() {
   }
 }
 
-
+// Trade Simulation
 document.getElementById("tradeForm").addEventListener("submit", (e) => {
   e.preventDefault();
   const symbol = document.getElementById("symbol").value.toUpperCase();
@@ -548,7 +460,7 @@ document.getElementById("tradeForm").addEventListener("submit", (e) => {
       localStorage.setItem("credits", credits.toString());
       updateCreditDisplay();
 
-     
+      // Store investment data with proper numeric values
       const investment = { 
         symbol, 
         amount: amount.toString(),
@@ -564,9 +476,205 @@ document.getElementById("tradeForm").addEventListener("submit", (e) => {
       localStorage.setItem("investments", JSON.stringify(investments));
 
       document.getElementById("tradeResult").textContent = `✅ Invested ${amount} credits in ${symbol}!`;
-      loadInvestmentHistory();
     })
     .catch(() => {
       document.getElementById("tradeResult").textContent = "❌ Invalid symbol or server error!";
     });
 });
+
+// Login functionality
+function initAuth() {
+  const loginForm = document.getElementById('loginForm');
+  const signupForm = document.getElementById('signupForm');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const showSignup = document.getElementById('showSignup');
+  const showLogin = document.getElementById('showLogin');
+  const loginModal = document.getElementById('loginModal');
+  const signupModal = document.getElementById('signupModal');
+  const userProfile = document.getElementById('userProfile');
+  const loginBtn = document.getElementById('loginBtn');
+
+  // Check if user is already logged in
+  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+  if (currentUser) {
+    updateUserProfile(currentUser);
+  }
+
+  // Login form submission
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
+    
+    // Get users from localStorage
+    const users = JSON.parse(localStorage.getItem('users') || '{}');
+    
+    if (users[username] && users[username].password === password) {
+      localStorage.setItem('currentUser', JSON.stringify(users[username]));
+      updateUserProfile(users[username]);
+      loginModal.style.display = 'none';
+    } else {
+      alert('Invalid username or password');
+    }
+  });
+
+  // Signup form submission
+  signupForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = document.getElementById('signupUsername').value;
+    const email = document.getElementById('signupEmail').value;
+    const password = document.getElementById('signupPassword').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+
+    if (password !== confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    // Get existing users
+    const users = JSON.parse(localStorage.getItem('users') || '{}');
+    
+    if (users[username]) {
+      alert('Username already exists');
+      return;
+    }
+
+    // Create new user
+    users[username] = {
+      username,
+      email,
+      password,
+      profilePicture: 'default-avatar.png',
+      credits: 2000,
+      investments: []
+    };
+
+    localStorage.setItem('users', JSON.stringify(users));
+    localStorage.setItem('currentUser', JSON.stringify(users[username]));
+    updateUserProfile(users[username]);
+    signupModal.style.display = 'none';
+  });
+
+  // Logout functionality
+  logoutBtn.addEventListener('click', () => {
+    localStorage.removeItem('currentUser');
+    userProfile.style.display = 'none';
+    loginBtn.style.display = 'block';
+  });
+
+  // Modal navigation
+  showSignup.addEventListener('click', () => {
+    loginModal.style.display = 'none';
+    signupModal.style.display = 'block';
+  });
+
+  showLogin.addEventListener('click', () => {
+    signupModal.style.display = 'none';
+    loginModal.style.display = 'block';
+  });
+}
+
+function updateUserProfile(user) {
+  const userProfile = document.getElementById('userProfile');
+  const loginBtn = document.getElementById('loginBtn');
+  const profilePicture = document.getElementById('profilePicture');
+  const usernameDisplay = document.getElementById('username');
+
+  userProfile.style.display = 'flex';
+  loginBtn.style.display = 'none';
+  profilePicture.src = user.profilePicture;
+  usernameDisplay.textContent = user.username;
+}
+
+// Update portfolio calculations
+async function updatePortfolio() {
+  const investments = JSON.parse(localStorage.getItem("investments")) || [];
+  const tableBody = document.getElementById("investmentHistory").getElementsByTagName('tbody')[0];
+  tableBody.innerHTML = "";
+
+  // Calculate total invested and current value
+  let totalInvested = 0;
+  let totalCurrentValue = 0;
+
+  for (const investment of investments) {
+    try {
+      const response = await fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${investment.symbol}`);
+      const data = await response.json();
+      
+      if (data.error) {
+        console.error("Error fetching price for", investment.symbol, ":", data.error);
+        continue;
+      }
+
+      // Parse all values to ensure they're numbers
+      const buyPrice = parseFloat(investment.price);
+      const currentPrice = parseFloat(data.price);
+      const creditsInvested = parseFloat(investment.amount);
+      const quantity = creditsInvested / buyPrice;
+      const creditsNow = quantity * currentPrice;
+      const profitLossAmount = creditsNow - creditsInvested;
+      const profitLossPercent = (profitLossAmount / creditsInvested) * 100;
+      
+      // Update totals
+      totalInvested += creditsInvested;
+      totalCurrentValue += creditsNow;
+
+      // Create table row
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${investment.symbol}</td>
+        <td>${buyPrice.toFixed(2)}</td>
+        <td>${currentPrice.toFixed(2)}</td>
+        <td>${creditsInvested.toFixed(2)}</td>
+        <td>${creditsNow.toFixed(2)}</td>
+        <td>${quantity.toFixed(4)}</td>
+        <td class="${profitLossAmount >= 0 ? 'gain' : 'loss'}">${profitLossAmount >= 0 ? '+' : ''}${profitLossAmount.toFixed(2)}</td>
+        <td class="${profitLossAmount >= 0 ? 'gain' : 'loss'}">${profitLossPercent.toFixed(2)}%</td>
+        <td><button onclick="sellInvestment(${investments.indexOf(investment)})">💸 Sell</button></td>
+      `;
+      tableBody.appendChild(row);
+
+    } catch (error) {
+      console.error("Error processing investment:", error);
+    }
+  }
+
+  // Update summary section
+  document.getElementById("totalInvested").textContent = totalInvested.toFixed(2);
+  document.getElementById("currentValue").textContent = totalCurrentValue.toFixed(2);
+  const totalProfitLoss = totalCurrentValue - totalInvested;
+  const totalProfitLossPercent = totalInvested > 0 ? (totalProfitLoss / totalInvested) * 100 : 0;
+  document.getElementById("totalPnL").textContent = 
+    `${totalProfitLoss >= 0 ? '+' : ''}${totalProfitLoss.toFixed(2)} (${totalProfitLossPercent.toFixed(2)}%)`;
+}
+
+function sellInvestment(index) {
+  const investments = JSON.parse(localStorage.getItem("investments")) || [];
+  const inv = investments[index];
+
+  fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${inv.symbol}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        alert("❌ Error fetching current price. Please try again.");
+        return;
+      }
+
+      const currentPrice = parseFloat(data.price);
+      const quantity = parseFloat(inv.quantity);
+      const sellAmount = quantity * currentPrice;
+      
+      let credits = parseFloat(localStorage.getItem("credits")) || 0;
+      credits += sellAmount;
+      localStorage.setItem("credits", credits.toString());
+      updateCreditDisplay();
+
+      investments.splice(index, 1);
+      localStorage.setItem("investments", JSON.stringify(investments));
+      updatePortfolio();
+      alert(`✅ Sold ${inv.symbol} for ${sellAmount.toFixed(2)} credits!`);
+    })
+    .catch(() => {
+      alert("❌ Could not complete sale. Please try again.");
+    });
+}
