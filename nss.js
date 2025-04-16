@@ -67,7 +67,7 @@ function fetchTopGainers() {
       const tbody = document.querySelector("#gainersTable tbody");
       if (tbody) {
         tbody.innerHTML = "";
-        data.slice(0, 10).forEach(item => {
+      data.slice(0, 10).forEach(item => {
           const row = document.createElement("tr");
           row.innerHTML = `
             <td>${item.symbol}</td>
@@ -90,7 +90,7 @@ function fetchTopLosers() {
       const tbody = document.querySelector("#losersTable tbody");
       if (tbody) {
         tbody.innerHTML = "";
-        data.slice(0, 10).forEach(item => {
+      data.slice(0, 10).forEach(item => {
           const row = document.createElement("tr");
           row.innerHTML = `
             <td>${item.symbol}</td>
@@ -125,18 +125,38 @@ let currentStockData = null;
 
 function openTradeModal(symbol) {
   fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${symbol}`)
-    .then(res => res.json())
-    .then(data => {
-      currentStockData = data;
-      document.getElementById("modalStockSymbol").textContent = symbol;
-      document.getElementById("modalStockPrice").textContent = parseFloat(data.price).toFixed(2);
-      document.getElementById("modalTradeAmount").value = "";
-      document.getElementById("modalQuantityPreview").textContent = "0";
-      document.getElementById("tradeModal").style.display = "block";
-      document.getElementById("modalTradeAmount").focus();
+    .then(res => {
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      return res.json();
     })
-    .catch(() => {
-      alert("❌ Error fetching stock price. Please try again.");
+    .then(data => {
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      currentStockData = data;
+      
+      // Get modal elements
+      const modalStockSymbol = document.getElementById("modalStockSymbol");
+      const modalStockPrice = document.getElementById("modalStockPrice");
+      const modalTradeAmount = document.getElementById("modalTradeAmount");
+      const modalQuantityPreview = document.getElementById("modalQuantityPreview");
+      const tradeModal = document.getElementById("tradeModal");
+      
+      // Check if elements exist before setting content
+      if (modalStockSymbol) modalStockSymbol.textContent = symbol;
+      if (modalStockPrice) modalStockPrice.textContent = parseFloat(data.price).toFixed(2);
+      if (modalTradeAmount) modalTradeAmount.value = "";
+      if (modalQuantityPreview) modalQuantityPreview.textContent = "0";
+      if (tradeModal) {
+        tradeModal.style.display = "block";
+        if (modalTradeAmount) modalTradeAmount.focus();
+      }
+    })
+    .catch(error => {
+      console.error("Error fetching stock price:", error);
+      alert(`❌ Error: ${error.message || "Could not fetch stock price. Please try again."}`);
     });
 }
 
@@ -146,34 +166,37 @@ function closeTradeModal() {
 }
 
 function updateQuantityPreview() {
-  const amount = parseFloat(document.getElementById("modalTradeAmount").value);
+  const amount = parseFloat(document.getElementById("modalTradeAmount").value) || 0;
   const price = currentStockData ? parseFloat(currentStockData.price) : 0;
   const quantity = price > 0 ? amount / price : 0;
-  document.getElementById("modalQuantityPreview").textContent = quantity.toFixed(4);
+  const quantityPreview = document.getElementById("modalQuantityPreview");
+  if (quantityPreview) {
+    quantityPreview.textContent = quantity.toFixed(4);
+  }
 }
 
 function confirmTrade() {
   const amount = parseFloat(document.getElementById("modalTradeAmount").value);
-  const credits = parseFloat(localStorage.getItem("credits")) || 2000;
+  let credits = parseFloat(localStorage.getItem("credits")) || 2000;
 
   if (!amount || amount <= 0) {
     alert("❌ Please enter a valid amount!");
     return;
   }
 
-  if (amount > credits) {
+      if (amount > credits) {
     alert("❌ Not enough credits!");
-    return;
-  }
+        return;
+      }
 
   const symbol = currentStockData.symbol;
   const price = parseFloat(currentStockData.price);
   const quantity = amount / price;
 
   // Update credits
-  credits -= amount;
+      credits -= amount;
   localStorage.setItem("credits", credits.toString());
-  updateCreditDisplay();
+      updateCreditDisplay();
 
   // Save investment
   const investment = {
@@ -184,9 +207,9 @@ function confirmTrade() {
     date: new Date().toLocaleDateString()
   };
 
-  const investments = JSON.parse(localStorage.getItem("investments")) || [];
-  investments.push(investment);
-  localStorage.setItem("investments", JSON.stringify(investments));
+      const investments = JSON.parse(localStorage.getItem("investments")) || [];
+      investments.push(investment);
+      localStorage.setItem("investments", JSON.stringify(investments));
 
   // Update UI
   updatePortfolio();
@@ -284,13 +307,24 @@ document.getElementById("stockSearch").addEventListener("input", (e) => {
 });
 
 // Add event listener for trade amount input
-document.getElementById("modalTradeAmount").addEventListener("input", updateQuantityPreview);
-
-// Close modal when clicking outside
-document.getElementById("tradeModal").addEventListener("click", (e) => {
-  if (e.target.classList.contains("trade-modal")) {
-    closeTradeModal();
+document.addEventListener('DOMContentLoaded', () => {
+  const modalTradeAmount = document.getElementById("modalTradeAmount");
+  const tradeModal = document.getElementById("tradeModal");
+  
+  if (modalTradeAmount) {
+    modalTradeAmount.addEventListener("input", updateQuantityPreview);
   }
+  
+  if (tradeModal) {
+    tradeModal.addEventListener("click", (e) => {
+      if (e.target.classList.contains("trade-modal")) {
+        closeTradeModal();
+      }
+    });
+  }
+  
+  // Initialize navigation
+  initNavigation();
 });
 
 function initNavigation() {
@@ -383,12 +417,12 @@ async function updatePortfolio() {
       totalInvested += creditsInvested;
       totalCurrentValue += creditsNow;
 
-      const row = document.createElement("tr");
+        const row = document.createElement("tr");
       const profitLossClass = profitLossAmount >= 0 ? 'gain' : 'loss';
       const profitLossSymbol = profitLossAmount >= 0 ? '📈' : '📉';
       const profitLossSign = profitLossAmount >= 0 ? '+' : '';
 
-      row.innerHTML = `
+        row.innerHTML = `
         <td><strong>${investment.symbol}</strong></td>
         <td>${buyPrice.toFixed(2)} 💰</td>
         <td>${currentPrice.toFixed(2)} 📊</td>
@@ -420,9 +454,17 @@ async function updatePortfolio() {
 }
 
 function sellInvestment(index) {
-  const investments = JSON.parse(localStorage.getItem("investments")) || [];
+  // Get investments from localStorage
+  const investments = JSON.parse(localStorage.getItem("investments") || "[]");
   const inv = investments[index];
 
+  if (!inv || !inv.symbol || !inv.quantity) {
+    console.error("❌ Invalid investment data:", inv);
+    alert("❌ Investment or quantity missing. Please check your portfolio.");
+    return;
+  }
+
+  // Fetch current stock price
   fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${inv.symbol}`)
     .then(res => res.json())
     .then(data => {
@@ -434,19 +476,22 @@ function sellInvestment(index) {
       const currentPrice = parseFloat(data.price);
       const quantity = parseFloat(inv.quantity);
       const sellAmount = quantity * currentPrice;
-      
+
+      // Add sell amount to credits
       let credits = parseFloat(localStorage.getItem("credits")) || 0;
       credits += sellAmount;
       localStorage.setItem("credits", credits.toString());
       updateCreditDisplay();
 
+      // Remove the sold investment
       investments.splice(index, 1);
       localStorage.setItem("investments", JSON.stringify(investments));
+
       updatePortfolio();
       alert(`✅ Sold ${inv.symbol} for ${sellAmount.toFixed(2)} credits!`);
     })
     .catch(() => {
-      alert("❌ Could not complete sale. Please try again.");
+      alert("❌ Could not fetch the stock price. Please try again.");
     });
 }
 
@@ -1181,6 +1226,20 @@ function initWheel() {
     ctx.arc(150, 150, 20, 0, 2 * Math.PI);
     ctx.fill();
     ctx.stroke();
+
+    // Add pointer
+    const pointer = document.createElement('div');
+    pointer.className = 'wheel-pointer';
+    pointer.style.position = 'absolute';
+    pointer.style.top = '50%';
+    pointer.style.left = '50%';
+    pointer.style.transform = 'translate(-50%, -50%)';
+    pointer.style.width = '20px';
+    pointer.style.height = '20px';
+    pointer.style.backgroundColor = '#FF0000';
+    pointer.style.clipPath = 'polygon(50% 0%, 0% 100%, 100% 100%)';
+    pointer.style.zIndex = '1';
+    document.querySelector('.wheel-container').appendChild(pointer);
 }
 
 function startSpinWheel() {
