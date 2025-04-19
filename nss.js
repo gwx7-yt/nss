@@ -1313,16 +1313,18 @@ document.getElementById('tutorialNext')?.addEventListener('click', () => {
 
 // Handle tutorial completion
 document.getElementById('tutorialStart')?.addEventListener('click', () => {
-  const nameInput = document.getElementById('investorName');
-  const investorName = nameInput.value.trim();
+  const username = document.getElementById('tutorialUsername').value.trim();
+  const password = document.getElementById('tutorialPassword').value.trim();
   
-  if (!investorName) {
-    alert('Please enter your name to continue!');
+  if (!username || !password) {
+    alert('Please enter both username and password to continue!');
     return;
   }
   
-  // Save investor name
-  localStorage.setItem('investorName', investorName);
+  // Save user credentials
+  localStorage.setItem('username', username);
+  localStorage.setItem('password', password);
+  localStorage.setItem('isLoggedIn', 'true');
   localStorage.setItem('hasVisitedBefore', 'true');
   
   // Hide tutorial
@@ -1332,18 +1334,106 @@ document.getElementById('tutorialStart')?.addEventListener('click', () => {
   initializeApp();
 });
 
+// Add username validation
+document.getElementById('tutorialUsername')?.addEventListener('input', (e) => {
+  const username = e.target.value;
+  const validationMessage = document.getElementById('usernameValidation');
+  
+  if (username.includes(' ')) {
+    e.target.style.borderColor = 'var(--error-color)';
+    if (!validationMessage) {
+      const message = document.createElement('div');
+      message.id = 'usernameValidation';
+      message.className = 'validation-message';
+      message.textContent = 'No spaces allowed in username';
+      e.target.parentNode.appendChild(message);
+    } else {
+      validationMessage.classList.add('show');
+    }
+  } else {
+    e.target.style.borderColor = 'var(--border-color)';
+    if (validationMessage) {
+      validationMessage.classList.remove('show');
+    }
+  }
+});
+
 // Initialize app after tutorial
 function initializeApp() {
   // Show home section
   showSection('home');
   updateActiveSection('home');
   
-  // Update welcome message with investor name
-  const investorName = localStorage.getItem('investorName');
-  if (investorName) {
+  // Update welcome message with username
+  const username = localStorage.getItem('username');
+  if (username) {
     const welcomeMessage = document.querySelector('[data-translate="welcome"]');
     if (welcomeMessage) {
-      welcomeMessage.textContent = `Welcome, ${investorName}!`;
+      welcomeMessage.textContent = `Welcome, ${username}!`;
     }
+  }
+}
+
+// Login functionality
+function showLoginModal() {
+  const loginModal = document.getElementById('loginModal');
+  loginModal.style.display = 'block';
+}
+
+function closeLoginModal() {
+  const loginModal = document.getElementById('loginModal');
+  loginModal.style.display = 'none';
+}
+
+function showRegisterModal() {
+  closeLoginModal();
+  // TODO: Implement register modal
+  alert('Registration feature coming soon!');
+}
+
+function handleLogin() {
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+
+  if (!username || !password) {
+    alert('Please enter both username and password');
+    return;
+  }
+
+  // TODO: Implement actual login logic with backend
+  // For now, we'll just simulate a successful login
+  localStorage.setItem('isLoggedIn', 'true');
+  localStorage.setItem('username', username);
+  
+  closeLoginModal();
+  updateLoginStatus();
+}
+
+function updateLoginStatus() {
+  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+  const username = localStorage.getItem('username');
+  
+  const loginButton = document.querySelector('.nav-links a[href="#login"]');
+  if (loginButton) {
+    if (isLoggedIn) {
+      loginButton.textContent = `Welcome, ${username}`;
+      loginButton.onclick = null;
+    } else {
+      loginButton.textContent = 'Login';
+      loginButton.onclick = showLoginModal;
+    }
+  }
+}
+
+// Initialize login status when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  updateLoginStatus();
+});
+
+// Close login modal when clicking outside
+window.onclick = function(event) {
+  const loginModal = document.getElementById('loginModal');
+  if (event.target === loginModal) {
+    closeLoginModal();
   }
 }
