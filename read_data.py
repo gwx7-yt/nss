@@ -210,5 +210,41 @@ def checkProfitLoss():
         print(f"Error checking profit/loss for {symbol}: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
+@app.route("/get_user")
+def get_user():
+    username = request.args.get("username")
+    if not username:
+        return jsonify({"error": "Username not provided"}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Query the users table
+        cursor.execute("SELECT id, username, credits FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        
+        conn.close()
+        
+        if user:
+            return jsonify({
+                "id": user[0],
+                "username": user[1],
+                "credits": user[2]
+            })
+        else:
+            return jsonify({"error": "User not found"}), 404
+            
+    except Exception as e:
+        print(f"Error fetching user data: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8000)
+
+    import sqlite3
+
+def get_db_connection():
+    conn = sqlite3.connect('nss_data.db')
+    conn.row_factory = sqlite3.Row  # Optional: lets you access columns by name
+    return conn
