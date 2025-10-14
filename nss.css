@@ -297,6 +297,102 @@ main {
 }
 
 /* Search Styles */
+.market-filters {
+  margin: 1.5rem auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.market-filters label {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  color: var(--secondary-color);
+  background: var(--card-background);
+  padding: 0.75rem 1rem;
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+
+.market-filters select {
+  margin-top: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 999px;
+  border: 2px solid var(--secondary-color);
+  background: var(--card-background);
+  color: var(--text-color);
+  min-width: 220px;
+  font-weight: 600;
+  transition: var(--transition);
+}
+
+.market-filters select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.25);
+}
+
+.sector-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.sector-card {
+  background: var(--card-background);
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sector-card h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--primary-color);
+}
+
+.sector-subindex {
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.sector-index {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.sector-index small {
+  font-size: 0.8rem;
+  font-weight: 400;
+  margin-left: 0.25rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.sector-metric {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.sector-count {
+  margin-top: auto;
+  font-size: 0.85rem;
+  color: rgba(0, 0, 0, 0.5);
+}
+
+#allStocksTable td.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 500;
+}
+
 .market-search {
   position: relative;
 }

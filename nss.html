@@ -167,6 +167,23 @@
           </div>
         </div>
 
+        <div class="market-filters">
+          <label for="sectorFilter">
+            <span>Sector</span>
+            <select id="sectorFilter">
+              <option value="all">All sectors</option>
+            </select>
+          </label>
+          <label for="subIndexFilter">
+            <span>Sub-Index</span>
+            <select id="subIndexFilter">
+              <option value="all">All sub-indices</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="sectorOverview" class="sector-overview"></div>
+
         <div class="market-movers">
           <div class="movers-container">
             <div class="gainers-table">
@@ -205,6 +222,8 @@
               <tr>
                 <th data-translate="symbol">Symbol</th>
                 <th data-translate="companyName">Company Name</th>
+                <th data-translate="sector">Sector</th>
+                <th data-translate="subIndex">Sub-Index</th>
                 <th data-translate="ltp">LTP</th>
                 <th data-translate="change">Change</th>
                 <th data-translate="action">Action</th>
