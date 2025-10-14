@@ -1,5 +1,19 @@
+const DEFAULT_API_BASE_URL = "https://nss-c26z.onrender.com";
+const API_BASE_URL = (() => {
+  const base = window.API_BASE_URL || DEFAULT_API_BASE_URL;
+  return base.endsWith("/") ? base.slice(0, -1) : base;
+})();
+
+function apiFetch(path, options) {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return fetch(`${API_BASE_URL}${normalizedPath}`, options);
+}
+
 // Store company information globally
 let companyDetails = new Map();
+let allStocksData = [];
+let sectorOverviewData = [];
+let sectorToSubIndex = new Map();
 
 // Loading and Tutorial Management
 let currentStep = 1;
@@ -12,7 +26,7 @@ function isFirstVisit() {
 
 // Fetch and store company details
 function fetchCompanyDetails() {
-  fetch("https://nss-c26z.onrender.com/CompanyList")
+  apiFetch("/CompanyList")
     .then(res => res.json())
     .then(data => {
       companyDetails.clear();
@@ -23,13 +37,38 @@ function fetchCompanyDetails() {
           type: company.instrumentType
         });
       });
-      // After getting company details, load stocks
+      // After getting company details, load stocks and overview data
       loadAllStocks();
+      fetchSectorOverview();
     })
     .catch((error) => {
       console.error("⚠️ Error fetching company details:", error);
       // Still try to load stocks even if company details fail
       loadAllStocks();
+      fetchSectorOverview();
+    });
+}
+
+function fetchSectorOverview() {
+  apiFetch("/SectorOverview")
+    .then(res => res.json())
+    .then(data => {
+      sectorOverviewData = Array.isArray(data.sectors) ? data.sectors : [];
+      sectorToSubIndex.clear();
+      sectorOverviewData.forEach(sector => {
+        if (sector && sector.sectorName) {
+          sectorToSubIndex.set(sector.sectorName, sector.subIndex || "N/A");
+        }
+      });
+      populateSectorFilters();
+      renderSectorOverview();
+      renderAllStocks();
+    })
+    .catch((error) => {
+      console.error("⚠️ Error fetching sector overview:", error);
+      populateSectorFilters();
+      renderSectorOverview();
+      renderAllStocks();
     });
 }
 
@@ -55,19 +94,29 @@ document.addEventListener("DOMContentLoaded", () => {
   updatePortfolio();
   initNavigation();
 
+  const sectorFilter = document.getElementById('sectorFilter');
+  if (sectorFilter) {
+    sectorFilter.addEventListener('change', renderAllStocks);
+  }
+
+  const subIndexFilter = document.getElementById('subIndexFilter');
+  if (subIndexFilter) {
+    subIndexFilter.addEventListener('change', renderAllStocks);
+  }
+
   if (!localStorage.getItem('allUsers')) {
     addSampleUsers();
   }
 });
 
 function fetchTopGainers() {
-  fetch("https://nss-c26z.onrender.com/TopGainers")
+  apiFetch("/TopGainers")
     .then(res => res.json())
     .then(data => {
       const tbody = document.querySelector("#gainersTable tbody");
       if (tbody) {
         tbody.innerHTML = "";
-      data.slice(0, 10).forEach(item => {
+        data.slice(0, 10).forEach(item => {
           const row = document.createElement("tr");
           row.innerHTML = `
             <td>${item.symbol}</td>
@@ -84,13 +133,13 @@ function fetchTopGainers() {
 }
 
 function fetchTopLosers() {
-  fetch("https://nss-c26z.onrender.com/TopLosers")
+  apiFetch("/TopLosers")
     .then(res => res.json())
     .then(data => {
       const tbody = document.querySelector("#losersTable tbody");
       if (tbody) {
         tbody.innerHTML = "";
-      data.slice(0, 10).forEach(item => {
+        data.slice(0, 10).forEach(item => {
           const row = document.createElement("tr");
           row.innerHTML = `
             <td>${item.symbol}</td>
@@ -124,7 +173,7 @@ function updateCreditDisplay() {
 let currentStockData = null;
 
 function openTradeModal(symbol) {
-  fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${symbol}`)
+  apiFetch(`/StockPrice?symbol=${encodeURIComponent(symbol)}`)
     .then(res => {
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
@@ -145,8 +194,12 @@ function openTradeModal(symbol) {
       const tradeModal = document.getElementById("tradeModal");
       
       // Check if elements exist before setting content
+      const priceValue = Number.parseFloat(data.price);
+
       if (modalStockSymbol) modalStockSymbol.textContent = symbol;
-      if (modalStockPrice) modalStockPrice.textContent = parseFloat(data.price).toFixed(2);
+      if (modalStockPrice) {
+        modalStockPrice.textContent = Number.isFinite(priceValue) ? priceValue.toFixed(2) : 'N/A';
+      }
       if (modalTradeAmount) modalTradeAmount.value = "";
       if (modalQuantityPreview) modalQuantityPreview.textContent = "0";
       if (tradeModal) {
@@ -219,91 +272,284 @@ function confirmTrade() {
 
 // Update search result click handler
 function handleSearchResultClick(symbol) {
+  const sectorFilter = document.getElementById("sectorFilter");
+  const subIndexFilter = document.getElementById("subIndexFilter");
+  const companyInfo = companyDetails.get(symbol);
+
+  if (companyInfo && sectorFilter) {
+    const hasSectorOption = Array.from(sectorFilter.options).some(
+      option => option.value === companyInfo.sector
+    );
+    sectorFilter.value = hasSectorOption ? companyInfo.sector : "all";
+  }
+
+  if (subIndexFilter) {
+    const mappedSubIndex = companyInfo ? sectorToSubIndex.get(companyInfo.sector) : undefined;
+    const hasSubIndexOption = mappedSubIndex
+      ? Array.from(subIndexFilter.options).some(option => option.value === mappedSubIndex)
+      : false;
+    subIndexFilter.value = hasSubIndexOption ? mappedSubIndex : "all";
+  }
+
+  renderAllStocks();
+
+  const resultsDiv = document.getElementById("searchResults");
+  if (resultsDiv) {
+    resultsDiv.style.display = "none";
+  }
+
   const stockRow = document.querySelector(`#allStocksTable tr[data-symbol="${symbol}"]`);
   if (stockRow) {
     stockRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
     stockRow.classList.add('highlight');
     setTimeout(() => stockRow.classList.remove('highlight'), 2000);
   }
+
   openTradeModal(symbol);
+}
+
+function populateSectorFilters() {
+  const sectorFilter = document.getElementById("sectorFilter");
+  const subIndexFilter = document.getElementById("subIndexFilter");
+  if (!sectorFilter || !subIndexFilter) {
+    return;
+  }
+
+  const previousSector = sectorFilter.value || "all";
+  const previousSubIndex = subIndexFilter.value || "all";
+
+  const sectors = new Set();
+  sectorOverviewData.forEach(sector => {
+    if (sector && sector.sectorName) {
+      sectors.add(sector.sectorName);
+    }
+  });
+
+  if (!sectors.size) {
+    companyDetails.forEach(info => {
+      if (info && info.sector) {
+        sectors.add(info.sector);
+      }
+    });
+  }
+
+  const sortedSectors = Array.from(sectors)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+
+  sectorFilter.innerHTML = '<option value="all">All sectors</option>' +
+    sortedSectors.map(sector => `<option value="${sector}">${sector}</option>`).join('');
+
+  if (previousSector === "all" || sectors.has(previousSector)) {
+    sectorFilter.value = previousSector;
+  }
+
+  const subIndices = new Set();
+  sectorOverviewData.forEach(sector => {
+    if (sector && sector.subIndex) {
+      subIndices.add(sector.subIndex);
+    }
+  });
+
+  const sortedSubIndices = Array.from(subIndices)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+
+  subIndexFilter.innerHTML = '<option value="all">All sub-indices</option>' +
+    sortedSubIndices.map(indexName => `<option value="${indexName}">${indexName}</option>`).join('');
+
+  if (previousSubIndex === "all" || subIndices.has(previousSubIndex)) {
+    subIndexFilter.value = previousSubIndex;
+  }
+}
+
+function renderSectorOverview() {
+  const container = document.getElementById("sectorOverview");
+  if (!container) {
+    return;
+  }
+
+  if (!sectorOverviewData.length) {
+    container.innerHTML = `
+      <div class="sector-card">
+        <h4>Sector insights unavailable</h4>
+        <p class="sector-subindex">Sector performance data will appear once the market information loads.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = sectorOverviewData.map(sector => {
+    const indexData = sector.subIndexData || {};
+    const indexValue = Number.isFinite(indexData.currentValue) ? indexData.currentValue : null;
+    const pointChange = Number.isFinite(indexData.pointChange) ? indexData.pointChange : null;
+    const percentChange = Number.isFinite(indexData.percentageChange) ? indexData.percentageChange : null;
+    const changeClass = pointChange === null ? '' : (pointChange < 0 ? 'loss' : 'gain');
+    const changeSign = pointChange === null ? '' : (pointChange < 0 ? '' : '+');
+    const indexValueLabel = indexValue === null ? 'N/A' : indexValue.toFixed(2);
+    const changeLabel = pointChange === null ? 'N/A' : `${changeSign}${pointChange.toFixed(2)}`;
+    const percentLabel = percentChange === null ? 'N/A' : `${changeSign}${percentChange.toFixed(2)}%`;
+
+    return `
+      <div class="sector-card">
+        <h4>${sector.sectorName}</h4>
+        <div class="sector-subindex">${sector.subIndex || 'Sub-index unavailable'}</div>
+        <div class="sector-index ${changeClass}">
+          ${indexValueLabel} <small>(${changeLabel} / ${percentLabel})</small>
+        </div>
+        <div class="sector-metric"><span>Turnover</span><span>${formatMoney(sector.totalTurnover)}</span></div>
+        <div class="sector-metric"><span>Trades</span><span>${formatNumber(sector.totalTrades)}</span></div>
+        <div class="sector-metric"><span>Volume</span><span>${formatNumber(sector.totalTradeQuantity)}</span></div>
+        <div class="sector-count">${formatNumber(sector.companies.length)} companies</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAllStocks() {
+  const tbody = document.querySelector("#allStocksTable tbody");
+  if (!tbody) {
+    return;
+  }
+
+  const selectedSector = document.getElementById("sectorFilter")?.value || "all";
+  const selectedSubIndex = document.getElementById("subIndexFilter")?.value || "all";
+
+  tbody.innerHTML = "";
+
+  if (!allStocksData.length) {
+    const emptyRow = document.createElement("tr");
+    emptyRow.innerHTML = '<td colspan="7" class="empty-state">Loading stock data...</td>';
+    tbody.appendChild(emptyRow);
+    return;
+  }
+
+  const filteredStocks = allStocksData.filter(stock => {
+    const companyInfo = companyDetails.get(stock.symbol) || {};
+    const sectorName = companyInfo.sector || "N/A";
+    const subIndexName = sectorToSubIndex.get(sectorName) || "N/A";
+    const matchesSector = selectedSector === "all" || sectorName === selectedSector;
+    const matchesSubIndex = selectedSubIndex === "all" || subIndexName === selectedSubIndex;
+    return matchesSector && matchesSubIndex;
+  });
+
+  if (!filteredStocks.length) {
+    const emptyRow = document.createElement("tr");
+    emptyRow.innerHTML = '<td colspan="7" class="empty-state">No stocks match the selected filters.</td>';
+    tbody.appendChild(emptyRow);
+    return;
+  }
+
+  filteredStocks
+    .slice()
+    .sort((a, b) => a.symbol.localeCompare(b.symbol))
+    .forEach(stock => {
+      const row = document.createElement("tr");
+      row.setAttribute('data-symbol', stock.symbol);
+      const companyInfo = companyDetails.get(stock.symbol) || { name: stock.symbol, sector: 'N/A' };
+      const sectorName = companyInfo.sector || 'N/A';
+      const subIndexName = sectorToSubIndex.get(sectorName) || 'N/A';
+      const priceValue = Number.parseFloat(stock.price);
+      const priceLabel = Number.isFinite(priceValue) ? priceValue.toFixed(2) : 'N/A';
+      const changeValue = Number.parseFloat(stock.changePercent);
+      const changeClass = Number.isFinite(changeValue) && changeValue >= 0 ? 'gain' : 'loss';
+      const changeSign = Number.isFinite(changeValue) && changeValue >= 0 ? '+' : '';
+      const changeLabel = Number.isFinite(changeValue)
+        ? `${changeSign}${changeValue.toFixed(2)}%`
+        : 'N/A';
+
+      row.setAttribute('data-sector', sectorName);
+      row.setAttribute('data-sub-index', subIndexName);
+
+      row.innerHTML = `
+        <td>${stock.symbol}</td>
+        <td>${companyInfo.name}</td>
+        <td>${sectorName}</td>
+        <td>${subIndexName}</td>
+        <td>${priceLabel}</td>
+        <td class="${changeClass}">${changeLabel}</td>
+        <td><button onclick="openTradeModal('${stock.symbol}')" class="trade-btn">Trade</button></td>
+      `;
+
+      tbody.appendChild(row);
+    });
 }
 
 // Update loadAllStocks function to add data attributes and new trade button
 function loadAllStocks() {
-  fetch("https://nss-c26z.onrender.com/AllStocks")
+  apiFetch("/AllStocks")
     .then(res => res.json())
     .then(data => {
-      const tbody = document.querySelector("#allStocksTable tbody");
-      if (tbody) {
-        tbody.innerHTML = "";
-        data.forEach(stock => {
-          const row = document.createElement("tr");
-          row.setAttribute('data-symbol', stock.symbol);
-          const changeClass = parseFloat(stock.changePercent) >= 0 ? "gain" : "loss";
-          const changeSymbol = parseFloat(stock.changePercent) >= 0 ? "+" : "";
-          const companyInfo = companyDetails.get(stock.symbol) || { name: stock.symbol, sector: 'N/A' };
-          
-          row.innerHTML = `
-            <td>${stock.symbol}</td>
-            <td>${companyInfo.name}</td>
-            <td>${parseFloat(stock.price).toFixed(2)}</td>
-            <td class="${changeClass}">${changeSymbol}${stock.changePercent}%</td>
-            <td><button onclick="openTradeModal('${stock.symbol}')" class="trade-btn">Trade</button></td>
-          `;
-          tbody.appendChild(row);
-        });
-      }
+      allStocksData = Array.isArray(data) ? data : [];
+      renderAllStocks();
     })
     .catch(() => {
       console.error("⚠️ Error loading all stocks");
+      allStocksData = [];
+      renderAllStocks();
     });
 }
 
 // Update search functionality
 document.getElementById("stockSearch").addEventListener("input", (e) => {
-  const searchTerm = e.target.value.toLowerCase();
+  const searchTerm = e.target.value.trim().toLowerCase();
   const resultsDiv = document.getElementById("searchResults");
-  
+
   if (searchTerm.length < 2) {
     resultsDiv.style.display = "none";
+    resultsDiv.innerHTML = "";
     return;
   }
 
-  fetch("https://nss-c26z.onrender.com/AllStocks")
-    .then(res => res.json())
-    .then(data => {
-      const matches = data.filter(stock => {
-        const companyInfo = companyDetails.get(stock.symbol);
-        return stock.symbol.toLowerCase().includes(searchTerm) ||
-          (companyInfo && companyInfo.name.toLowerCase().includes(searchTerm));
-      });
+  if (!allStocksData.length) {
+    resultsDiv.innerHTML = '<div class="no-results">Loading stock data...</div>';
+    resultsDiv.style.display = "block";
+    return;
+  }
 
-      if (matches.length > 0) {
-        resultsDiv.innerHTML = matches.slice(0, 5).map(stock => {
-          const companyInfo = companyDetails.get(stock.symbol) || { name: stock.symbol, sector: 'N/A' };
-          return `
-            <div class="search-result" onclick="handleSearchResultClick('${stock.symbol}')">
-              <div class="stock-info">
-                <strong>${stock.symbol}</strong>
-                <span>${companyInfo.name}</span>
-                <small>${companyInfo.sector}</small>
-              </div>
-              <div class="stock-price ${parseFloat(stock.changePercent) >= 0 ? 'gain' : 'loss'}">
-                ${parseFloat(stock.price).toFixed(2)}
-                (${parseFloat(stock.changePercent) >= 0 ? '+' : ''}${stock.changePercent}%)
-              </div>
-            </div>
-          `;
-        }).join('');
-        resultsDiv.style.display = "block";
-      } else {
-        resultsDiv.innerHTML = '<div class="no-results">No matches found</div>';
-        resultsDiv.style.display = "block";
-      }
-    })
-    .catch(() => {
-      console.error("⚠️ Error searching stocks");
-    });
+  const matches = allStocksData.filter(stock => {
+    const companyInfo = companyDetails.get(stock.symbol);
+    const symbolMatch = stock.symbol.toLowerCase().includes(searchTerm);
+    const nameMatch = companyInfo && companyInfo.name && companyInfo.name.toLowerCase().includes(searchTerm);
+    return symbolMatch || nameMatch;
+  });
+
+  if (matches.length > 0) {
+    resultsDiv.innerHTML = matches.slice(0, 5).map(stock => {
+      const companyInfo = companyDetails.get(stock.symbol) || { name: stock.symbol, sector: 'N/A' };
+      const sectorName = companyInfo.sector || 'N/A';
+      const subIndexName = sectorToSubIndex.get(sectorName);
+      const changeValue = Number.parseFloat(stock.changePercent);
+      const changeClass = Number.isFinite(changeValue) && changeValue >= 0 ? 'gain' : 'loss';
+      const changeSign = Number.isFinite(changeValue) && changeValue >= 0 ? '+' : '';
+      const priceValue = Number.parseFloat(stock.price);
+      const priceLabel = Number.isFinite(priceValue) ? priceValue.toFixed(2) : 'N/A';
+      const changeLabel = Number.isFinite(changeValue)
+        ? `${changeSign}${changeValue.toFixed(2)}%`
+        : 'N/A';
+      const categoryLabel = subIndexName && subIndexName !== 'N/A'
+        ? `${sectorName} • ${subIndexName}`
+        : sectorName;
+
+      return `
+        <div class="search-result" onclick="handleSearchResultClick('${stock.symbol}')">
+          <div class="stock-info">
+            <strong>${stock.symbol}</strong>
+            <span>${companyInfo.name}</span>
+            <small>${categoryLabel}</small>
+          </div>
+          <div class="stock-price ${changeClass}">
+            ${priceLabel}
+            (${changeLabel})
+          </div>
+        </div>
+      `;
+    }).join('');
+    resultsDiv.style.display = "block";
+  } else {
+    resultsDiv.innerHTML = '<div class="no-results">No matches found</div>';
+    resultsDiv.style.display = "block";
+  }
 });
 
 // Add event listener for trade amount input
@@ -398,7 +644,7 @@ async function updatePortfolio() {
 
   for (const investment of investments) {
     try {
-      const response = await fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${investment.symbol}`);
+      const response = await apiFetch(`/StockPrice?symbol=${encodeURIComponent(investment.symbol)}`);
       const data = await response.json();
       
       if (data.error) {
@@ -465,7 +711,7 @@ function sellInvestment(index) {
   }
 
   // Fetch current stock price
-  fetch(`https://nss-c26z.onrender.com/StockPrice?symbol=${inv.symbol}`)
+  apiFetch(`/StockPrice?symbol=${encodeURIComponent(inv.symbol)}`)
     .then(res => res.json())
     .then(data => {
       if (data.error) {
@@ -592,14 +838,27 @@ function updateLeaderboard() {
     }
 }
 
+function formatNumber(value, options = {}) {
+  const numericValue = Number.parseFloat(value);
+  if (!Number.isFinite(numericValue)) {
+    return '0';
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: options.minimumFractionDigits || 0,
+    maximumFractionDigits: options.maximumFractionDigits ?? 0,
+  }).format(numericValue);
+}
+
 // Helper function to format money values
 function formatMoney(amount) {
+    const numericAmount = Number.parseFloat(amount);
     return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'NPR',
         minimumFractionDigits: 0,
         maximumFractionDigits: 0
-    }).format(amount);
+    }).format(Number.isFinite(numericAmount) ? numericAmount : 0);
 }
 
 // Update leaderboard after trades and portfolio updates
