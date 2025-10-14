@@ -1,8 +1,10 @@
+from datetime import datetime, timedelta
+
+import pandas as pd
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+
 from nepse import Nepse
-import pandas as pd
-from datetime import datetime, timedelta
 
 app = Flask(__name__)
 CORS(app)
@@ -22,11 +24,30 @@ routes = {
     "AllStocks": "/AllStocks",
     "StockPrice": "/StockPrice",
     "SimulateTrade": "/simulateTrade",
-    "CheckProfitLoss": "/checkProfitLoss"
+    "CheckProfitLoss": "/checkProfitLoss",
+    "SectorOverview": "/SectorOverview",
 }
 
 # In-memory storage for simulated trades
 simulated_trades = {}
+
+
+def _safe_float(value, default=0.0):
+    try:
+        if value in (None, ""):
+            return float(default)
+        return float(str(value).replace(",", ""))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _safe_int(value, default=0):
+    try:
+        if value in (None, ""):
+            return int(default)
+        return int(float(str(value).replace(",", "")))
+    except (TypeError, ValueError):
+        return int(default)
 
 @app.route("/")
 def getIndex():
@@ -70,6 +91,91 @@ def getSecurityList():
 @app.route(routes["PriceVolume"])
 def getPriceVolume():
     return jsonify(nepse.getPriceVolume())
+
+
+@app.route(routes["SectorOverview"])
+def getSectorOverview():
+    companies = nepse.getCompanyList()
+    price_volume = {obj["symbol"]: obj for obj in nepse.getPriceVolume()}
+    sub_indices = {obj["index"]: obj for obj in nepse.getNepseSubIndices()}
+
+    sector_mapper = {
+        "Commercial Banks": "Banking SubIndex",
+        "Development Banks": "Development Bank Index",
+        "Finance": "Finance Index",
+        "Hotels And Tourism": "Hotels And Tourism Index",
+        "Hydro Power": "HydroPower Index",
+        "Investment": "Investment Index",
+        "Life Insurance": "Life Insurance",
+        "Manufacturing And Processing": "Manufacturing And Processing",
+        "Microfinance": "Microfinance Index",
+        "Mutual Fund": "Mutual Fund",
+        "Non Life Insurance": "Non Life Insurance",
+        "Others": "Others Index",
+        "Tradings": "Trading Index",
+    }
+
+    sectors = {}
+    for company in companies:
+        symbol = company.get("symbol")
+        sector_name = company.get("sectorName", "Others")
+        if not symbol:
+            continue
+
+        sector_info = sectors.setdefault(
+            sector_name,
+            {
+                "sectorName": sector_name,
+                "subIndex": sector_mapper.get(sector_name),
+                "subIndexData": {},
+                "totalTurnover": 0.0,
+                "totalTrades": 0,
+                "totalTradeQuantity": 0.0,
+                "companies": [],
+            },
+        )
+
+        price_info = price_volume.get(symbol, {})
+        turnover = _safe_float(price_info.get("turnover"))
+        trades = _safe_int(price_info.get("totalTrades"))
+        trade_quantity = price_info.get("totalTradedQuantity")
+        if trade_quantity is None:
+            trade_quantity = price_info.get("totalTradeQuantity")
+        trade_quantity_value = _safe_float(trade_quantity)
+
+        sector_info["totalTurnover"] += turnover
+        sector_info["totalTrades"] += trades
+        sector_info["totalTradeQuantity"] += trade_quantity_value
+
+        sector_info["companies"].append(
+            {
+                "symbol": symbol,
+                "companyName": company.get("companyName"),
+                "sectorName": sector_name,
+                "lastTradedPrice": _safe_float(price_info.get("lastTradedPrice")),
+                "pointChange": _safe_float(price_info.get("pointChange")),
+                "percentageChange": _safe_float(price_info.get("percentageChange")),
+            }
+        )
+
+    for sector_name, info in sectors.items():
+        index_name = info["subIndex"]
+        if index_name:
+            index_data = sub_indices.get(index_name, {})
+            if index_data:
+                info["subIndexData"] = {
+                    "currentValue": _safe_float(index_data.get("currentValue")),
+                    "pointChange": _safe_float(index_data.get("pointChange")),
+                    "percentageChange": _safe_float(index_data.get("percentageChange")),
+                }
+        info["companies"].sort(key=lambda company: company["symbol"])
+
+    response = {
+        "updatedAt": datetime.utcnow().isoformat() + "Z",
+        "sectors": sorted(sectors.values(), key=lambda item: item["sectorName"]),
+    }
+
+    return jsonify(response)
 
 @app.route(routes["AllStocks"])
 def getAllStocks():
