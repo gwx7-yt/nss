@@ -13,6 +13,8 @@ from nepse import Nepse
 app = Flask(__name__)
 CORS(app)
 
+
+
 nepse = Nepse()
 nepse.setTLSVerification(False)
 
@@ -72,6 +74,7 @@ def _normalize_database_url():
 
 def get_db_connection():
     return psycopg2.connect(_normalize_database_url())
+    init_db()
 DAILY_OHLC_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS daily_ohlc (
     id BIGSERIAL PRIMARY KEY,
@@ -152,6 +155,80 @@ DO UPDATE SET
     pct_change = EXCLUDED.pct_change,
     last_updated = EXCLUDED.last_updated;
 """
+def init_db():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(DAILY_OHLC_SCHEMA_SQL)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _parse_last_updated(value):
+    if not value:
+        return None
+    # Try common formats safely; NEPSE may return ISO-ish strings
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def refresh_daily_ohlc():
+    """
+    Pulls the latest daily snapshot from NEPSE and upserts into daily_ohlc.
+    Safe to run multiple times per day due to UNIQUE(symbol, trading_date).
+    """
+    companies = nepse.getCompanyList()
+    company_by_symbol = {c.get("symbol", "").upper(): c for c in companies if c.get("symbol")}
+
+    # This should contain open/high/low/lastTradedPrice etc based on your earlier fields list
+    rows = nepse.getPriceVolume()
+
+    payloads = []
+    for r in rows:
+        symbol = str(r.get("symbol", "")).upper()
+        if not symbol:
+            continue
+
+        comp = company_by_symbol.get(symbol, {})
+        sector = comp.get("sectorName") or comp.get("marketSector") or None
+
+        last_updated_dt = _parse_last_updated(r.get("lastUpdatedDateTime"))
+        last_updated_str = last_updated_dt.isoformat() if last_updated_dt else None
+
+        payloads.append({
+            "security_id": _safe_int(r.get("securityId"), default=None) if r.get("securityId") is not None else None,
+            "symbol": symbol,
+            "security_name": r.get("securityName") or comp.get("securityName") or comp.get("companyName"),
+            "sector": sector,
+
+            "open_price": _safe_float(r.get("openPrice"), default=None) if r.get("openPrice") is not None else None,
+            "high_price": _safe_float(r.get("highPrice"), default=None) if r.get("highPrice") is not None else None,
+            "low_price": _safe_float(r.get("lowPrice"), default=None) if r.get("lowPrice") is not None else None,
+            "close_price": _safe_float(r.get("lastTradedPrice"), default=None) if r.get("lastTradedPrice") is not None else None,
+            "prev_close": _safe_float(r.get("previousClose"), default=None) if r.get("previousClose") is not None else None,
+
+            # choose best available volume-like field
+            "volume": _safe_float(r.get("lastTradedVolume") or r.get("totalTradeQuantity") or r.get("totalTradeQuantity"), default=None),
+            "trade_qty": _safe_float(r.get("totalTradeQuantity"), default=None) if r.get("totalTradeQuantity") is not None else None,
+            "trade_value": _safe_float(r.get("totalTradeValue"), default=None) if r.get("totalTradeValue") is not None else None,
+            "pct_change": _safe_float(r.get("percentageChange"), default=None) if r.get("percentageChange") is not None else None,
+            "last_updated": last_updated_str,
+        })
+
+    if not payloads:
+        return {"inserted": 0, "message": "No rows from NEPSE"}
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            extras.execute_batch(cur, UPSERT_DAILY_OHLC_SQL, payloads, page_size=200)
+        conn.commit()
+        return {"upserted": len(payloads)}
+    finally:
+        conn.close()
 
 
 def _fetch_all(query, params=None):
