@@ -74,7 +74,15 @@ def _normalize_database_url():
 
 def get_db_connection():
     return psycopg2.connect(_normalize_database_url())
-    init_db()
+    def init_db():
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(DAILY_OHLC_SCHEMA_SQL)
+        conn.commit()
+    finally:
+        conn.close()
+
 DAILY_OHLC_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS daily_ohlc (
     id BIGSERIAL PRIMARY KEY,
