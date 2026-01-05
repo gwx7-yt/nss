@@ -1,6 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+import os
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import pandas as pd
+import psycopg2
+from psycopg2 import extras
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -48,6 +52,46 @@ def _safe_int(value, default=0):
         return int(float(str(value).replace(",", "")))
     except (TypeError, ValueError):
         return int(default)
+
+
+def _normalize_database_url():
+    raw_url = os.environ.get("DATABASE_URL")
+    if not raw_url:
+        raise RuntimeError("DATABASE_URL is not set")
+
+    if raw_url.startswith("postgres://"):
+        raw_url = "postgresql://" + raw_url[len("postgres://"):]
+
+    parsed = urlparse(raw_url)
+    query = parse_qs(parsed.query)
+    if "sslmode" not in query:
+        query["sslmode"] = ["require"]
+
+    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+
+def get_db_connection():
+    return psycopg2.connect(_normalize_database_url())
+
+
+def _fetch_all(query, params=None):
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            cur.execute(query, params or ())
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def _fetch_one(query, params=None):
+    conn = get_db_connection()
+    try:
+        with conn.cursor(cursor_factory=extras.RealDictCursor) as cur:
+            cur.execute(query, params or ())
+            return cur.fetchone()
+    finally:
+        conn.close()
 
 @app.route("/")
 def getIndex():
@@ -316,6 +360,124 @@ def checkProfitLoss():
         print(f"Error checking profit/loss for {symbol}: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
+
+def _parse_date(value):
+    if not value:
+        return None
+    return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+@app.route("/api/ohlc/<symbol>")
+def get_ohlc_history(symbol):
+    from_param = request.args.get("from")
+    to_param = request.args.get("to")
+    limit_param = request.args.get("limit", "90")
+
+    try:
+        limit = int(limit_param)
+    except ValueError:
+        return jsonify({"error": "limit must be an integer"}), 400
+
+    from_date = _parse_date(from_param)
+    to_date = _parse_date(to_param)
+
+    if not to_date:
+        to_date = date.today()
+    if not from_date:
+        from_date = to_date - timedelta(days=90)
+
+    rows = _fetch_all(
+        """
+        SELECT trading_date,
+               open_price,
+               high_price,
+               low_price,
+               close_price,
+               prev_close,
+               volume,
+               trade_qty,
+               trade_value,
+               pct_change
+          FROM daily_ohlc
+         WHERE symbol = %s
+           AND trading_date BETWEEN %s AND %s
+         ORDER BY trading_date ASC
+         LIMIT %s
+        """,
+        (symbol.upper(), from_date, to_date, limit),
+    )
+
+    response = [
+        {
+            "date": row["trading_date"].isoformat(),
+            "open": row["open_price"],
+            "high": row["high_price"],
+            "low": row["low_price"],
+            "close": row["close_price"],
+            "prev_close": row["prev_close"],
+            "volume": row["volume"],
+            "trade_qty": row["trade_qty"],
+            "trade_value": row["trade_value"],
+            "pct_change": row["pct_change"],
+        }
+        for row in rows
+    ]
+
+    return jsonify(response)
+
+
+@app.route("/api/ohlc/latest/<symbol>")
+def get_latest_ohlc(symbol):
+    row = _fetch_one(
+        """
+        SELECT trading_date,
+               open_price,
+               high_price,
+               low_price,
+               close_price,
+               prev_close,
+               volume,
+               trade_qty,
+               trade_value,
+               pct_change
+          FROM daily_ohlc
+         WHERE symbol = %s
+         ORDER BY trading_date DESC
+         LIMIT 1
+        """,
+        (symbol.upper(),),
+    )
+
+    if not row:
+        return jsonify({"error": "No data found"}), 404
+
+    return jsonify(
+        {
+            "date": row["trading_date"].isoformat(),
+            "open": row["open_price"],
+            "high": row["high_price"],
+            "low": row["low_price"],
+            "close": row["close_price"],
+            "prev_close": row["prev_close"],
+            "volume": row["volume"],
+            "trade_qty": row["trade_qty"],
+            "trade_value": row["trade_value"],
+            "pct_change": row["pct_change"],
+        }
+    )
+
+
+@app.route("/api/ohlc/symbols")
+def get_ohlc_symbols():
+    rows = _fetch_all(
+        """
+        SELECT DISTINCT symbol
+          FROM daily_ohlc
+         ORDER BY symbol ASC
+        """
+    )
+    return jsonify([row["symbol"] for row in rows])
+
 @app.route("/get_user")
 def get_user():
     username = request.args.get("username")
@@ -324,19 +486,22 @@ def get_user():
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
         
         # Query the users table
-        cursor.execute("SELECT id, username, credits FROM users WHERE username = ?", (username,))
+        cursor.execute(
+            "SELECT id, username, credits FROM users WHERE username = %s",
+            (username,),
+        )
         user = cursor.fetchone()
         
         conn.close()
         
         if user:
             return jsonify({
-                "id": user[0],
-                "username": user[1],
-                "credits": user[2]
+                "id": user["id"],
+                "username": user["username"],
+                "credits": user["credits"]
             })
         else:
             return jsonify({"error": "User not found"}), 404
@@ -347,10 +512,3 @@ def get_user():
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8000)
-
-    import sqlite3
-
-def get_db_connection():
-    conn = sqlite3.connect('nss_data.db')
-    conn.row_factory = sqlite3.Row  # Optional: lets you access columns by name
-    return conn
