@@ -6,3 +6,4 @@ gunicorn==20.1.0
 Flask-Cors==4.0.0
 git+https://github.com/basic-bgnr/NepseUnofficialApi.git
 pandas
+psycopg2-binary==2.9.9
