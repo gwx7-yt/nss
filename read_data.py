@@ -13,8 +13,6 @@ from nepse import Nepse
 app = Flask(__name__)
 CORS(app)
 
-
-
 nepse = Nepse()
 nepse.setTLSVerification(False)
 
@@ -38,22 +36,22 @@ routes = {
 simulated_trades = {}
 
 
-def _safe_float(value, default=0.0):
+def _safe_float(value, default=None):
     try:
         if value in (None, ""):
-            return float(default)
+            return default
         return float(str(value).replace(",", ""))
     except (TypeError, ValueError):
-        return float(default)
+        return default
 
 
-def _safe_int(value, default=0):
+def _safe_int(value, default=None):
     try:
         if value in (None, ""):
-            return int(default)
+            return default
         return int(float(str(value).replace(",", "")))
     except (TypeError, ValueError):
-        return int(default)
+        return default
 
 
 def _normalize_database_url():
@@ -61,6 +59,7 @@ def _normalize_database_url():
     if not raw_url:
         raise RuntimeError("DATABASE_URL is not set")
 
+    # Some platforms still provide postgres:// but psycopg2 prefers postgresql://
     if raw_url.startswith("postgres://"):
         raw_url = "postgresql://" + raw_url[len("postgres://"):]
 
@@ -74,14 +73,7 @@ def _normalize_database_url():
 
 def get_db_connection():
     return psycopg2.connect(_normalize_database_url())
-    def init_db():
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute(DAILY_OHLC_SCHEMA_SQL)
-        conn.commit()
-    finally:
-        conn.close()
+
 
 DAILY_OHLC_SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS daily_ohlc (
@@ -163,20 +155,38 @@ DO UPDATE SET
     pct_change = EXCLUDED.pct_change,
     last_updated = EXCLUDED.last_updated;
 """
+
+
 def init_db():
+    """
+    Creates daily_ohlc table + indexes.
+    psycopg2 does best with one statement at a time, so we split by ';'.
+    """
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute(DAILY_OHLC_SCHEMA_SQL)
+            statements = [s.strip() for s in DAILY_OHLC_SCHEMA_SQL.split(";") if s.strip()]
+            for stmt in statements:
+                cur.execute(stmt)
         conn.commit()
     finally:
         conn.close()
 
 
+_ohlc_ready = False
+
+
+def ensure_ohlc_table():
+    global _ohlc_ready
+    if _ohlc_ready:
+        return
+    init_db()
+    _ohlc_ready = True
+
+
 def _parse_last_updated(value):
     if not value:
         return None
-    # Try common formats safely; NEPSE may return ISO-ish strings
     try:
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except Exception:
@@ -191,10 +201,9 @@ def refresh_daily_ohlc():
     companies = nepse.getCompanyList()
     company_by_symbol = {c.get("symbol", "").upper(): c for c in companies if c.get("symbol")}
 
-    # This should contain open/high/low/lastTradedPrice etc based on your earlier fields list
     rows = nepse.getPriceVolume()
-
     payloads = []
+
     for r in rows:
         symbol = str(r.get("symbol", "")).upper()
         if not symbol:
@@ -206,28 +215,32 @@ def refresh_daily_ohlc():
         last_updated_dt = _parse_last_updated(r.get("lastUpdatedDateTime"))
         last_updated_str = last_updated_dt.isoformat() if last_updated_dt else None
 
-        payloads.append({
-            "security_id": _safe_int(r.get("securityId"), default=None) if r.get("securityId") is not None else None,
-            "symbol": symbol,
-            "security_name": r.get("securityName") or comp.get("securityName") or comp.get("companyName"),
-            "sector": sector,
+        # volume fallback: prefer lastTradedVolume, then totalTradeQuantity
+        volume_value = r.get("lastTradedVolume")
+        if volume_value is None:
+            volume_value = r.get("totalTradeQuantity")
 
-            "open_price": _safe_float(r.get("openPrice"), default=None) if r.get("openPrice") is not None else None,
-            "high_price": _safe_float(r.get("highPrice"), default=None) if r.get("highPrice") is not None else None,
-            "low_price": _safe_float(r.get("lowPrice"), default=None) if r.get("lowPrice") is not None else None,
-            "close_price": _safe_float(r.get("lastTradedPrice"), default=None) if r.get("lastTradedPrice") is not None else None,
-            "prev_close": _safe_float(r.get("previousClose"), default=None) if r.get("previousClose") is not None else None,
-
-            # choose best available volume-like field
-            "volume": _safe_float(r.get("lastTradedVolume") or r.get("totalTradeQuantity") or r.get("totalTradeQuantity"), default=None),
-            "trade_qty": _safe_float(r.get("totalTradeQuantity"), default=None) if r.get("totalTradeQuantity") is not None else None,
-            "trade_value": _safe_float(r.get("totalTradeValue"), default=None) if r.get("totalTradeValue") is not None else None,
-            "pct_change": _safe_float(r.get("percentageChange"), default=None) if r.get("percentageChange") is not None else None,
-            "last_updated": last_updated_str,
-        })
+        payloads.append(
+            {
+                "security_id": _safe_int(r.get("securityId")),
+                "symbol": symbol,
+                "security_name": r.get("securityName") or comp.get("securityName") or comp.get("companyName"),
+                "sector": sector,
+                "open_price": _safe_float(r.get("openPrice")),
+                "high_price": _safe_float(r.get("highPrice")),
+                "low_price": _safe_float(r.get("lowPrice")),
+                "close_price": _safe_float(r.get("lastTradedPrice")),
+                "prev_close": _safe_float(r.get("previousClose")),
+                "volume": _safe_float(volume_value),
+                "trade_qty": _safe_float(r.get("totalTradeQuantity")),
+                "trade_value": _safe_float(r.get("totalTradeValue")),
+                "pct_change": _safe_float(r.get("percentageChange")),
+                "last_updated": last_updated_str,
+            }
+        )
 
     if not payloads:
-        return {"inserted": 0, "message": "No rows from NEPSE"}
+        return {"upserted": 0, "message": "No rows from NEPSE"}
 
     conn = get_db_connection()
     try:
@@ -258,14 +271,17 @@ def _fetch_one(query, params=None):
     finally:
         conn.close()
 
+
 @app.route("/")
 def getIndex():
     content = "<BR>".join([f"<a href={value}> {key} </a>" for key, value in routes.items()])
     return f"Serving hot stock data <BR>{content}"
 
+
 @app.route(routes["Summary"])
 def getSummary():
     return jsonify(_getSummary())
+
 
 def _getSummary():
     response = {}
@@ -273,29 +289,36 @@ def _getSummary():
         response[obj["detail"]] = obj["value"]
     return response
 
+
 @app.route(routes["IsNepseOpen"])
 def isNepseOpen():
     return jsonify(nepse.isNepseOpen())
+
 
 @app.route(routes["TopGainers"])
 def getTopGainers():
     return jsonify(nepse.getTopGainers())
 
+
 @app.route(routes["TopLosers"])
 def getTopLosers():
     return jsonify(nepse.getTopLosers())
+
 
 @app.route(routes["LiveMarket"])
 def getLiveMarket():
     return jsonify(nepse.getLiveMarket())
 
+
 @app.route(routes["CompanyList"])
 def getCompanyList():
     return jsonify(nepse.getCompanyList())
 
+
 @app.route(routes["SecurityList"])
 def getSecurityList():
     return jsonify(nepse.getSecurityList())
+
 
 @app.route(routes["PriceVolume"])
 def getPriceVolume():
@@ -345,12 +368,12 @@ def getSectorOverview():
         )
 
         price_info = price_volume.get(symbol, {})
-        turnover = _safe_float(price_info.get("turnover"))
-        trades = _safe_int(price_info.get("totalTrades"))
+        turnover = _safe_float(price_info.get("turnover"), default=0.0) or 0.0
+        trades = _safe_int(price_info.get("totalTrades"), default=0) or 0
         trade_quantity = price_info.get("totalTradedQuantity")
         if trade_quantity is None:
             trade_quantity = price_info.get("totalTradeQuantity")
-        trade_quantity_value = _safe_float(trade_quantity)
+        trade_quantity_value = _safe_float(trade_quantity, default=0.0) or 0.0
 
         sector_info["totalTurnover"] += turnover
         sector_info["totalTrades"] += trades
@@ -386,6 +409,7 @@ def getSectorOverview():
 
     return jsonify(response)
 
+
 @app.route(routes["AllStocks"])
 def getAllStocks():
     company_list = nepse.getCompanyList()
@@ -404,18 +428,15 @@ def getAllStocks():
             price = float(row["lastTradedPrice"].values[0])
             change = float(row["percentageChange"].values[0])
 
-            stock_info = {
-                "symbol": symbol,
-                "price": price,
-                "changePercent": change
-            }
+            stock_info = {"symbol": symbol, "price": price, "changePercent": change}
             all_stocks.append(stock_info)
 
         except Exception as e:
-            print(f"Error fetching data for {company['symbol']}: {str(e)}")
+            print(f"Error fetching data for {company.get('symbol')}: {str(e)}")
             continue
 
     return jsonify(all_stocks)
+
 
 @app.route(routes["StockPrice"])
 def getStockPrice():
@@ -438,18 +459,17 @@ def getStockPrice():
         print(f"Error fetching stock price for {symbol}: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
+
 @app.route(routes["SimulateTrade"], methods=["POST"])
 def simulateTrade():
-    """Simulate a trade with credits."""
-    data = request.json
+    data = request.json or {}
     symbol = data.get("symbol")
     credits = data.get("credits")
 
-    if not symbol or not credits:
+    if not symbol or credits is None:
         return jsonify({"error": "Symbol and credits are required"}), 400
 
     try:
-        # Get current stock price
         price_data = nepse.getPriceVolume()
         df = pd.DataFrame(price_data)
         row = df[df["symbol"].str.upper() == symbol.upper()]
@@ -458,33 +478,32 @@ def simulateTrade():
             return jsonify({"error": "Stock not found"}), 404
 
         price = float(row["lastTradedPrice"].values[0])
+        shares = float(credits) / price
 
-        # Calculate the number of shares the user can buy
-        shares = credits / price
-
-        # Store the simulated trade
         simulated_trades[symbol.upper()] = {
             "symbol": symbol.upper(),
             "credits": credits,
             "shares": shares,
             "price": price,
-            "timestamp": datetime.now()
+            "timestamp": datetime.now(),
         }
 
-        return jsonify({
-            "symbol": symbol.upper(),
-            "creditsUsed": credits,
-            "sharesBought": shares,
-            "priceAtPurchase": price
-        })
+        return jsonify(
+            {
+                "symbol": symbol.upper(),
+                "creditsUsed": credits,
+                "sharesBought": shares,
+                "priceAtPurchase": price,
+            }
+        )
 
     except Exception as e:
         print(f"Error simulating trade for {symbol}: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
+
 @app.route(routes["CheckProfitLoss"], methods=["GET"])
 def checkProfitLoss():
-    """Check profit or loss for the simulated trade."""
     symbol = request.args.get("symbol")
     if not symbol:
         return jsonify({"error": "Symbol is required"}), 400
@@ -494,12 +513,10 @@ def checkProfitLoss():
         return jsonify({"error": "No simulated trade found for this symbol"}), 404
 
     try:
-        # Ensure at least one day has passed
         time_elapsed = datetime.now() - trade["timestamp"]
         if time_elapsed < timedelta(days=1):
             return jsonify({"error": "You can only check profit/loss after one day"}), 400
 
-        # Get the current stock price
         price_data = nepse.getPriceVolume()
         df = pd.DataFrame(price_data)
         row = df[df["symbol"].str.upper() == symbol.upper()]
@@ -508,18 +525,18 @@ def checkProfitLoss():
             return jsonify({"error": "Stock not found"}), 404
 
         current_price = float(row["lastTradedPrice"].values[0])
-
-        # Calculate profit or loss
         profit_loss = (current_price - trade["price"]) * trade["shares"]
         profit_loss_percentage = ((current_price - trade["price"]) / trade["price"]) * 100
 
-        return jsonify({
-            "symbol": symbol.upper(),
-            "priceAtPurchase": trade["price"],
-            "currentPrice": current_price,
-            "profitLoss": profit_loss,
-            "profitLossPercentage": profit_loss_percentage
-        })
+        return jsonify(
+            {
+                "symbol": symbol.upper(),
+                "priceAtPurchase": trade["price"],
+                "currentPrice": current_price,
+                "profitLoss": profit_loss,
+                "profitLossPercentage": profit_loss_percentage,
+            }
+        )
 
     except Exception as e:
         print(f"Error checking profit/loss for {symbol}: {str(e)}")
@@ -532,8 +549,17 @@ def _parse_date(value):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
+@app.route("/api/ohlc/refresh", methods=["GET", "POST"])
+def ohlc_refresh_now():
+    ensure_ohlc_table()
+    result = refresh_daily_ohlc()
+    return jsonify(result)
+
+
 @app.route("/api/ohlc/<symbol>")
 def get_ohlc_history(symbol):
+    ensure_ohlc_table()
+
     from_param = request.args.get("from")
     to_param = request.args.get("to")
     limit_param = request.args.get("limit", "90")
@@ -593,6 +619,8 @@ def get_ohlc_history(symbol):
 
 @app.route("/api/ohlc/latest/<symbol>")
 def get_latest_ohlc(symbol):
+    ensure_ohlc_table()
+
     row = _fetch_one(
         """
         SELECT trading_date,
@@ -634,6 +662,7 @@ def get_latest_ohlc(symbol):
 
 @app.route("/api/ohlc/symbols")
 def get_ohlc_symbols():
+    ensure_ohlc_table()
     rows = _fetch_all(
         """
         SELECT DISTINCT symbol
@@ -642,6 +671,7 @@ def get_ohlc_symbols():
         """
     )
     return jsonify([row["symbol"] for row in rows])
+
 
 @app.route("/get_user")
 def get_user():
@@ -652,28 +682,34 @@ def get_user():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=extras.RealDictCursor)
-        
-        # Query the users table
         cursor.execute(
             "SELECT id, username, credits FROM users WHERE username = %s",
             (username,),
         )
         user = cursor.fetchone()
-        
         conn.close()
-        
+
         if user:
-            return jsonify({
-                "id": user["id"],
-                "username": user["username"],
-                "credits": user["credits"]
-            })
-        else:
-            return jsonify({"error": "User not found"}), 404
-            
+            return jsonify(
+                {"id": user["id"], "username": user["username"], "credits": user["credits"]}
+            )
+        return jsonify({"error": "User not found"}), 404
+
+    except psycopg2.errors.UndefinedTable:
+        # Users table not migrated to Postgres yet
+        return jsonify({"error": "users table not found in Postgres yet"}), 501
+
     except Exception as e:
         print(f"Error fetching user data: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
+
+# Ensure table on startup too (safe, but ensure_ohlc_table is the real safety net)
+try:
+    init_db()
+except Exception as e:
+    print("init_db failed at startup:", str(e))
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8000)
