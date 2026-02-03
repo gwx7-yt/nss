@@ -417,6 +417,8 @@ def getAllStocks():
 
     price_data = nepse.getPriceVolume()
     price_df = pd.DataFrame(price_data)
+    if price_df.empty or "symbol" not in price_df.columns:
+        return jsonify(all_stocks)
 
     for company in company_list:
         try:
@@ -478,6 +480,8 @@ def simulateTrade():
             return jsonify({"error": "Stock not found"}), 404
 
         price = float(row["lastTradedPrice"].values[0])
+        if price <= 0:
+            return jsonify({"error": "Invalid stock price"}), 422
         shares = float(credits) / price
 
         simulated_trades[symbol.upper()] = {
@@ -513,10 +517,6 @@ def checkProfitLoss():
         return jsonify({"error": "No simulated trade found for this symbol"}), 404
 
     try:
-        time_elapsed = datetime.now() - trade["timestamp"]
-        if time_elapsed < timedelta(days=1):
-            return jsonify({"error": "You can only check profit/loss after one day"}), 400
-
         price_data = nepse.getPriceVolume()
         df = pd.DataFrame(price_data)
         row = df[df["symbol"].str.upper() == symbol.upper()]
@@ -526,7 +526,10 @@ def checkProfitLoss():
 
         current_price = float(row["lastTradedPrice"].values[0])
         profit_loss = (current_price - trade["price"]) * trade["shares"]
-        profit_loss_percentage = ((current_price - trade["price"]) / trade["price"]) * 100
+        if trade["price"]:
+            profit_loss_percentage = ((current_price - trade["price"]) / trade["price"]) * 100
+        else:
+            profit_loss_percentage = None
 
         return jsonify(
             {
@@ -546,7 +549,10 @@ def checkProfitLoss():
 def _parse_date(value):
     if not value:
         return None
-    return datetime.strptime(value, "%Y-%m-%d").date()
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
 
 
 @app.route("/api/ohlc/refresh", methods=["GET", "POST"])
