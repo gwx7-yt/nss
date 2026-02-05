@@ -751,7 +751,8 @@ const homeDashboardState = {
   lastBreadth: null,
   lastSectorMetrics: null,
   lastTimeLabel: null,
-  marketOpen: null
+  marketOpen: null,
+  latestNepseIndex: null
 };
 
 function initializeHomeDashboard() {
@@ -778,12 +779,15 @@ async function tickHomeDashboard() {
   let dataUpdated = false;
 
   try {
-    [priceVolume, sectorOverview] = await Promise.all([
+    let nepseIndex = null;
+    [priceVolume, sectorOverview, nepseIndex] = await Promise.all([
       fetchHomeData(`${API_BASE}/PriceVolume`),
-      fetchHomeData(`${API_BASE}/SectorOverview`)
+      fetchHomeData(`${API_BASE}/SectorOverview`),
+      fetchHomeData(`${API_BASE}/api/nepse-index`)
     ]);
     homeDashboardState.latestPriceVolume = priceVolume;
     homeDashboardState.latestSectorOverview = sectorOverview;
+    homeDashboardState.latestNepseIndex = nepseIndex;
     dataUpdated = true;
   } catch (error) {
     priceVolume = homeDashboardState.latestPriceVolume;
@@ -800,11 +804,13 @@ async function tickHomeDashboard() {
     updateUpdatedStamp('homeSectorUpdated', timeLabel);
   }
 
+  const indexChange = extractNepseIndexChange(homeDashboardState.latestNepseIndex);
+  updateNepseIndexBadge(homeDashboardState.latestNepseIndex);
   updateTodayCard({
     marketOpen,
     breadth: homeDashboardState.lastBreadth,
     sectorMetrics: homeDashboardState.lastSectorMetrics,
-    indexChange: null
+    indexChange
   });
 
   renderHotToday(priceVolume);
@@ -830,8 +836,9 @@ function refreshHomeDashboardLocale() {
       marketOpen: homeDashboardState.marketOpen,
       breadth: homeDashboardState.lastBreadth,
       sectorMetrics: homeDashboardState.lastSectorMetrics,
-      indexChange: null
+      indexChange: extractNepseIndexChange(homeDashboardState.latestNepseIndex)
     });
+    updateNepseIndexBadge(homeDashboardState.latestNepseIndex);
   }
 
   if (homeDashboardState.latestPriceVolume) {
@@ -920,6 +927,47 @@ function updateUpdatedStamp(id, timeLabel) {
   if (element) {
     setNumberText(element, formatTimeLabel(timeLabel, getCurrentLanguage()));
   }
+}
+
+function extractNepseIndexChange(payload) {
+  if (!payload) {
+    return null;
+  }
+  const values = Array.isArray(payload)
+    ? payload
+    : (Array.isArray(payload?.data) ? payload.data : [payload]);
+
+  for (const row of values) {
+    const value = parseFloat(row?.change || row?.pointChange || row?.difference || row?.percentChange || row?.percentageChange);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function updateNepseIndexBadge(payload) {
+  const badge = document.getElementById('homeNepseIndexBadge');
+  if (!badge) {
+    return;
+  }
+
+  const values = Array.isArray(payload)
+    ? payload
+    : (Array.isArray(payload?.data) ? payload.data : [payload]);
+  const index = values.find(item => item && (item.index === 'NEPSE Index' || item.indexName === 'NEPSE Index')) || values[0];
+  const current = parseFloat(index?.currentValue || index?.value || index?.indexValue);
+  const change = parseFloat(index?.pointChange || index?.change || index?.difference);
+
+  const formattedCurrent = Number.isFinite(current) ? formatNumber(current, { decimals: 2, useCommas: true }, getCurrentLanguage()) : '--';
+  const formattedChange = Number.isFinite(change) ? formatNumber(change, { decimals: 2, useCommas: true }, getCurrentLanguage()) : '--';
+
+  badge.classList.remove('positive', 'negative');
+  if (Number.isFinite(change)) {
+    badge.classList.add(change >= 0 ? 'positive' : 'negative');
+  }
+  badge.textContent = `NEPSE Index: ${formattedCurrent} (${change >= 0 ? '+' : ''}${formattedChange})`;
 }
 
 function calculateBreadth(priceVolume) {

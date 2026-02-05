@@ -4822,3 +4822,57 @@ body.polish-enter .settings-card {
     transition: none !important;
   }
 }
+
+.home-index-badge {
+  margin-top: 8px;
+  display: inline-block;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #f3f4f6;
+  font-weight: 600;
+}
+
+.home-index-badge.positive { color: #15803d; background: #dcfce7; }
+.home-index-badge.negative { color: #b91c1c; background: #fee2e2; }
+
+.ta-section {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 16px;
+}
+
+.ta-header { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 10px; }
+.ta-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ta-search-wrap { position: relative; min-width: 220px; flex: 1; }
+.ta-search-wrap input, #taCompanySelect { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+#taCompanySelect { max-width: 300px; }
+.ta-company-results { position: absolute; top: 44px; left: 0; right: 0; z-index: 8; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; display: none; max-height: 220px; overflow-y: auto; }
+.ta-company-item { padding: 8px 10px; cursor: pointer; }
+.ta-company-item:hover { background: #f9fafb; }
+.ta-chart-area { display: flex; flex-direction: column; gap: 10px; }
+.ta-panel { width: 100%; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+.ta-price-panel { height: 360px; }
+.ta-volume-panel { height: 140px; }
+.ta-osc-panel { height: 220px; }
+.ta-indicators { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.ta-indicator-mobile-btn { display: none; }
+.ta-loading, .ta-error { grid-column: 1 / -1; }
+.ta-skeleton { height: 80px; border-radius: 12px; margin-bottom: 10px; background: linear-gradient(90deg, #f3f4f6, #e5e7eb, #f3f4f6); background-size: 200% 100%; animation: taPulse 1.2s infinite; }
+@keyframes taPulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.ta-error { border: 1px solid #fecaca; background: #fff1f2; color: #9f1239; padding: 12px; border-radius: 12px; }
+
+@media (max-width: 900px) {
+  .ta-section { grid-template-columns: 1fr; }
+  .ta-indicators {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 14px 14px 0 0;
+    z-index: 30;
+    display: none;
+  }
+  .ta-indicators.open { display: flex; }
+  .ta-indicator-mobile-btn { display: inline-block; padding: 10px 14px; border-radius: 8px; border: 0; background: #111827; color: #fff; }
+}
