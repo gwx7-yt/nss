@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+   <title>Arthyq- NEPSE Stock Simulation</title>
+  <meta name="description" content="Arthyq is a Nepali stock market simulator that helps beginners learn investing without real money. Trade safely, track portfolios, and build financial literacy.">
+  <link rel="icon" href="logo4b.png" type="image/x-icon" />
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Mukta:wght@400;500;600;700&family=Hind:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="nss.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="src/utils/localeFormat.js"></script>
+  <script src="src/utils/companyNameNp.js"></script>
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loadingScreen" class="loading-screen">
+    <div class="loading-content">
+      <img src="logo4a.png" alt="Arthyq Logo" class="loading-logo">
+      <div class="loading-text">
+        <h1 class="loading-title">Arthyq</h1>
+        <p class="loading-subtitle">Stock Simulator</p>
+        <p class="loading-status">Loading<span class="loading-ellipsis" aria-hidden="true"></span></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tutorial Overlay -->
+  <div id="tutorialOverlay" class="tutorial-overlay" style="display: none;">
+    <div class="tutorial-content">
+      <div class="tutorial-step" data-step="1">
+        <h2>Welcome to Arthyq! 👋</h2>
+        <p>Let's learn how to use Arthyq. First, let's understand the credit system.</p>
+        <p data-localize-numbers>💰 <span class="np-number">1</span> Credit = <span class="np-number">1</span> NPR (Nepali Rupee)</p>
+
+        <p data-localize-numbers>You start with <span class="np-number">1,000,000</span> credits to practice safely.</p>
+
+      </div>
+
+      <div class="tutorial-step" data-step="2">
+        <h2>Market Section 📈</h2>
+        <p>Here you can:</p>
+        <ul>
+          <li>View all available stocks</li>
+          <li>See top gainers and losers</li>
+          <li>Search for specific companies</li>
+          <li>Buy stocks using your credits</li>
+        </ul>
+      </div>
+
+      <div class="tutorial-step" data-step="3">
+        <h2>How to Buy Stocks 🛒</h2>
+        <p data-localize-numbers><span class="np-number">1</span>. Find a stock you want to buy</p>
+        <p data-localize-numbers><span class="np-number">2</span>. Click the "Trade" button</p>
+        <p data-localize-numbers><span class="np-number">3</span>. Enter the number of shares you want to buy</p>
+        <p data-localize-numbers><span class="np-number">4</span>. Confirm your purchase</p>
+
+        <p data-localize-numbers>Note: Minimum purchase is <span class="np-number">10</span> shares</p>
+
+      </div>
+
+      <div class="tutorial-step" data-step="4">
+        <h2>Portfolio Management 📊</h2>
+        <p>In your portfolio, you can:</p>
+        <ul>
+          <li>Track all your investments</li>
+          <li>Monitor profit/loss in real-time</li>
+          <li>Sell stocks when you want</li>
+          <li>View your total net worth</li>
+        </ul>
+      </div>
+
+      <div class="tutorial-step" data-step="5">
+        <h2>Set up your investor profile 🧾</h2>
+        <p>Tell us your name so we can personalize your experience:</p>
+        <div class="name-input">
+          <label for="investorName">Your Name:</label>
+          <input type="text" id="investorName" placeholder="Enter your name">
+        </div>
+      </div>
+
+      <div class="tutorial-navigation">
+        <button id="tutorialNext" class="tutorial-btn">Next</button>
+        <button id="tutorialStart" class="tutorial-btn" style="display: none;">Start Trading!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <nav class="top-nav">
+    <div class="nav-content">
+      <div class="nav-left">
+        <a href="#home" class="nav-icon">
+          <img src="home-icon.png" alt="Home" class="nav-img">
+          <span data-translate="home">Home</span>
+        </a>
+        <a href="#market" class="nav-icon">
+          <img src="market-icon.png" alt="Market" class="nav-img">
+          <span data-translate="market">Market</span>
+        </a>
+        <a href="#portfolio" class="nav-icon">
+          <img src="portfolio-icon.png" alt="Portfolio" class="nav-img">
+          <span data-translate="portfolio">Portfolio</span>
+        </a>
+        <a href="#settings" class="nav-icon">
+          <img src="settings-icon.png" alt="Settings" class="nav-img">
+          <span data-translate="settings">Settings</span>
+        </a>
+        <a href="#about" class="nav-icon">
+          <img src="about-icon.png" alt="About" class="nav-img">
+          <span data-translate="about">About</span>
+        </a>
+        <a href="#playground" class="nav-icon">
+          <img src="playground-icon.png" alt="Playground" class="nav-img">
+          <span data-translate="playgroundNav">Playground</span>
+        </a>
+      </div>
+      <div class="nav-right">
+        <div class="credits-display">
+          <img src="coins-stack.png" alt="Credits" class="credits-icon">
+          <span><span data-translate="credits">Credits</span>: <span id="creditBalance" class="np-number">(number of credits)</span></span>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <!-- Home Section -->
+    <section id="home">
+      <div class="welcome-section">
+        <h1 data-translate="welcome">Welcome</h1>
+        <div class="home-dashboard">
+          <div class="home-card home-status-card">
+            <div class="home-status-grid">
+              <div class="home-status-left">
+                <div class="home-status-label" data-translate="marketStatus">Market</div>
+                <div id="homeMarketState" class="home-status-value">OPEN</div>
+                <div class="home-updated">
+                  <span data-translate="lastUpdated">Last updated</span>
+                  <span id="homeLastUpdated" class="np-number">--</span>
+                </div>
+              </div>
+              <div class="home-status-kpis">
+                <div class="home-kpi">
+                  <span data-translate="advancers">Advancers</span>
+                  <span id="homeAdv" class="home-kpi-value gain np-number">0</span>
+                </div>
+                <div class="home-kpi">
+                  <span data-translate="decliners">Decliners</span>
+                  <span id="homeDec" class="home-kpi-value loss np-number">0</span>
+                </div>
+                <div class="home-kpi">
+                  <span data-translate="unchanged">Unchanged</span>
+                  <span id="homeUnch" class="home-kpi-value np-number">0</span>
+                </div>
+                <div class="home-kpi">
+                  <span data-translate="total">Total</span>
+                  <span id="homeTotal" class="home-kpi-value np-number">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="hot-today" class="home-card hot-today-card">
+            <div class="hot-today-header">
+              <div>
+                <h2 data-translate="hotTodayTitle">Hot Today</h2>
+                <p class="hot-today-subtitle" data-translate="hotTodaySubtitle">Active and moving stocks</p>
+              </div>
+              <div class="hot-today-actions">
+                <a id="hotTodayViewMarket" class="hot-today-link" href="#market" data-translate="hotTodayView">View Market</a>
+              </div>
+            </div>
+            <div id="hotTodayContent" class="hot-today-grid"></div>
+          </div>
+
+          <div class="home-card home-today-card">
+            <div class="home-card-header">
+              <h2 data-translate="todayInMarket">Today in the Market</h2>
+              <span id="homeTodayBadge" class="home-badge">Bullish</span>
+            </div>
+            <p id="homeTodayCardText">-</p>
+          </div>
+
+          <div class="home-card">
+            <div class="home-card-header">
+              <h2 data-translate="sectorPerformance">Sector Performance</h2>
+            </div>
+            <div class="home-chart">
+              <canvas id="homeSectorChart"></canvas>
+            </div>
+            <div class="home-updated home-updated-right">
+              <span data-translate="updated">Updated</span>
+              <span id="homeSectorUpdated" class="np-number">--</span>
+            </div>
+          </div>
+
+          <div class="market-movers">
+            <div class="movers-container">
+              <div class="gainers-table">
+                <h3 data-translate="topGainers">📈 Top Gainers</h3>
+                <table id="gainersTable">
+                  <thead>
+                    <tr>
+                      <th data-translate="symbol">Symbol</th>
+                      <th data-translate="price">Price</th>
+                      <th data-translate="change">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+
+              <div class="losers-table">
+                <h3 data-translate="topLosers">📉 Top Losers</h3>
+                <table id="losersTable">
+                  <thead>
+                    <tr>
+                      <th data-translate="symbol">Symbol</th>
+                      <th data-translate="price">Price</th>
+                      <th data-translate="change">Change</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Market Section -->
+    <section id="market" style="display: none;">
+      <div class="market-content">
+        <div class="market-search">
+          <div class="search-container">
+            <input type="text" id="stockSearch" data-translate-placeholder="search" placeholder="🔍 Search by company name or symbol..." aria-label="Search stocks" aria-controls="searchResults" autocomplete="off">
+            <div id="searchResults" class="search-results" aria-live="polite"></div>
+          </div>
+        </div>
+
+    
+
+        <div class="sector-categories">
+          <div class="sector-header">
+            <h3 data-translate="browseBySector">Browse by Sector</h3>
+            <span id="selectedSectorLabel" class="selected-sector" data-translate="allSectors">All Sectors</span>
+          </div>
+          <div id="sectorFilters" class="sector-chip-group"></div>
+          <p id="sectorEmptyState" class="sector-empty" style="display: none;" data-translate="noSectorResults">
+            No stocks found for this sector.
+          </p>
+        </div>
+
+        <div class="market-sort" role="group" aria-label="Sort stocks">
+          <span class="sort-label">Sort</span>
+          <div class="sort-buttons">
+            <button type="button" class="sort-btn" data-sort="name-asc">A to Z</button>
+            <button type="button" class="sort-btn" data-sort="name-desc">Z to A</button>
+            <button type="button" class="sort-btn" data-sort="change-desc">% Change high to low</button>
+            <button type="button" class="sort-btn" data-sort="change-asc">% Change low to high</button>
+            <button type="button" class="sort-btn" data-sort="rs-desc">RS high to low</button>
+            <button type="button" class="sort-btn" data-sort="rs-asc">RS low to high</button>
+          </div>
+        </div>
+
+        <div class="all-stocks">
+          <h3 data-translate="allStocks">All Stocks</h3>
+          <table id="allStocksTable">
+            <thead>
+              <tr>
+                <th data-translate="symbol">Symbol</th>
+                <th data-translate="companyName">Company Name</th>
+                <th data-translate="sector">Sector</th>
+                <th data-translate="ltp">LTP</th>
+                <th data-translate="change">Change</th>
+                <th data-translate="relativeStrength">RS</th>
+                <th data-translate="action">Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Portfolio Section -->
+    <section id="portfolio" style="display: none;">
+      <div class="portfolio-content">
+        <h2 class="section-title" data-translate="portfolio">My Investment Portfolio 📊</h2>
+
+        <div class="portfolio-summary">
+          <div class="portfolio-summary-card">
+            <span class="portfolio-summary-label" data-translate="portfolioTotalValue">Total Value</span>
+            <span id="portfolioTotalValue" class="portfolio-summary-value"></span>
+          </div>
+          <div class="portfolio-summary-card">
+            <span class="portfolio-summary-label" data-translate="portfolioTotalInvested">Total Invested</span>
+            <span id="portfolioTotalInvested" class="portfolio-summary-value"></span>
+          </div>
+          <div class="portfolio-summary-card">
+            <span class="portfolio-summary-label" data-translate="portfolioOverallPl">Overall P/L</span>
+            <span id="portfolioOverallPl" class="portfolio-summary-value"></span>
+          </div>
+          <div class="portfolio-summary-card">
+            <span class="portfolio-summary-label" data-translate="portfolioPositions">Positions</span>
+            <span id="portfolioPositionsCount" class="portfolio-summary-value"></span>
+          </div>
+        </div>
+
+        <div class="portfolio-controls">
+          <div class="portfolio-sort">
+            <span class="portfolio-sort-label" data-translate="portfolioSortBy">Sort by</span>
+            <button class="portfolio-sort-btn is-active" type="button" data-sort="pl" data-translate="portfolioSortPl">P/L</button>
+            <button class="portfolio-sort-btn" type="button" data-sort="value" data-translate="portfolioSortValue">Value</button>
+            <button class="portfolio-sort-btn" type="button" data-sort="qty" data-translate="portfolioSortQty">Qty</button>
+            <button class="portfolio-sort-btn" type="button" data-sort="symbol" data-translate="portfolioSortSymbol">Symbol</button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table id="investmentHistory">
+            <thead>
+              <tr>
+                <th data-translate="symbol">Symbol</th>
+                <th class="portfolio-align-right" data-translate="portfolioAvgBuy">Avg Buy</th>
+                <th class="portfolio-align-right" data-translate="portfolioLtp">LTP</th>
+                <th class="portfolio-align-right" data-translate="portfolioQty">Qty</th>
+                <th class="portfolio-align-right" data-translate="portfolioValue">Value</th>
+                <th class="portfolio-align-right" data-translate="portfolioPl">P/L 📊</th>
+                <th data-translate="action">Action ⚡</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="portfolio-graph-card">
+          <div class="portfolio-graph-header">
+            <h3 class="portfolio-graph-title" data-translate="portfolioPerformanceTitle">Performance</h3>
+            <div class="portfolio-graph-legend">
+              <span class="portfolio-graph-legend-item">
+                <span class="portfolio-graph-legend-swatch value"></span>
+                <span data-translate="portfolioPerformanceValue">Value</span>
+              </span>
+              <span class="portfolio-graph-legend-item">
+                <span class="portfolio-graph-legend-swatch invested"></span>
+                <span data-translate="portfolioPerformanceInvested">Invested</span>
+              </span>
+            </div>
+          </div>
+          <div id="portfolioGraph" class="portfolio-graph-body"></div>
+        </div>
+
+        <p class="portfolio-note" title="Broker fees apply when purchasing stocks, so your portfolio might show a small loss at first." data-translate="portfolioBrokerFeeNote">
+          🔍 Note: Portfolio shows slight initial loss due to broker fees
+        </p>
+
+        <div class="portfolio-actions">
+          <button onclick="showSection('market')" class="buy-more-btn" data-translate="buyMore">
+            Buy More Stocks 🚀
+          </button>
+        </div>
+
+        <div class="portfolio-transactions">
+          <h3 class="portfolio-transactions-title" data-translate="portfolioRecentTransactions">Recent Transactions</h3>
+          <div id="portfolioTransactions" class="portfolio-transactions-list"></div>
+        </div>
+
+        <div class="no-investments portfolio-empty-state">
+          <div class="message">
+            <h3 data-translate="portfolioEmpty">No investments yet!</h3>
+            <p data-translate="portfolioEmptyDesc">Start your investment journey by trading stocks in the market section.</p>
+            <button onclick="showSection('market')" class="start-investing-btn" data-translate="buyMore">Buy More Stocks</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="settings" style="display: none;">
+      <div class="settings-content">
+        <h2 class="section-title" data-translate="settings">Settings</h2>
+
+        <div class="settings-grid">
+          <!-- Theme Settings -->
+          <div class="settings-card">
+            <h3 data-translate="themeMode">Theme Mode</h3>
+            <div class="theme-toggle">
+              <button id="lightMode" class="theme-btn active">
+                <span class="icon">☀️</span>
+                <span class="label" data-translate="light">Light</span>
+              </button>
+              <button id="darkMode" class="theme-btn">
+                <span class="icon">🌙</span>
+                <span class="label" data-translate="dark">Dark</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Text Size Settings -->
+          <div class="settings-card">
+            <h3 data-translate="textSize">Text Size</h3>
+            <div class="text-size-controls">
+              <button id="smallText" class="size-btn">
+                <span class="label" data-translate="small">Small</span>
+                <span class="preview">Aa</span>
+              </button>
+              <button id="mediumText" class="size-btn active">
+                <span class="label" data-translate="medium">Medium</span>
+                <span class="preview">Aa</span>
+              </button>
+              <button id="largeText" class="size-btn">
+                <span class="label" data-translate="large">Large</span>
+                <span class="preview">Aa</span>
+              </button>
+            </div>
+            <p class="text-size-preview">Preview: Invest smart with clarity.</p>
+          </div>
+
+          <!-- Language Settings -->
+          <div class="settings-card">
+            <h3 data-translate="language">Language</h3>
+            <div class="language-toggle">
+              <button id="englishLang" class="lang-btn active">
+                <span class="icon">🇬🇧</span>
+                <span class="label-group">
+                  <span class="label" data-translate="english">English</span>
+                  <span class="region">(GB)</span>
+                </span>
+              </button>
+              <button id="nepaliLang" class="lang-btn">
+                <span class="icon">🇳🇵</span>
+                <span class="label-group">
+                  <span class="label" data-translate="nepali">नेपाली</span>
+                  <span class="region">(NP)</span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-info">
+          <p data-translate="settingsInfo">Changes are saved automatically and will persist across sessions.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="about" style="display: none;">
+      <div class="nss-about">
+        <div class="nss-about__bg"></div>
+
+        <div class="nss-about__container">
+          <header class="nss-about__header" data-reveal>
+            <div class="nss-about__kicker" data-translate="aboutKickerNot">What this is not</div>
+            <h2 class="nss-about__title" data-translate="aboutTitle">A simulator built for learning, not hype.</h2>
+            <p class="nss-about__lead" data-translate="aboutLead">Arthyq helps you understand how markets behave, how decisions feel, and why discipline matters. It is a safe place to practice before real money is on the line.</p>
+          </header>
+
+          <div class="nss-about__grid">
+            <article class="nss-about__card" data-reveal>
+              <h3 class="nss-about__cardTitle" data-translate="aboutCard1Title">Not a trading app</h3>
+              <p class="nss-about__cardText" data-translate="aboutCard1Text">You cannot place real orders here. This is practice, not execution.</p>
+            </article>
+
+            <article class="nss-about__card nss-about__card--long" data-reveal>
+              <h3 class="nss-about__cardTitle" data-translate="aboutCard2Title">Not a get rich quick scheme</h3>
+              <p class="nss-about__cardText" data-translate="aboutCard2Text">If someone promises guaranteed returns, run. This platform teaches process, not shortcuts.</p>
+            </article>
+
+            <article class="nss-about__card" data-reveal>
+              <h3 class="nss-about__cardTitle" data-translate="aboutCard3Title">Not financial advice</h3>
+              <p class="nss-about__cardText" data-translate="aboutCard3Text">We do not tell you what to buy or sell. You learn to think, research, and decide.</p>
+            </article>
+
+            <article class="nss-about__card" data-reveal>
+              <h3 class="nss-about__cardTitle" data-translate="aboutCard4Title">Not gambling</h3>
+              <p class="nss-about__cardText" data-translate="aboutCard4Text">We focus on reasoning and risk management. Random bets are the fastest way to lose.</p>
+            </article>
+
+            <article class="nss-about__card nss-about__card--wide" data-reveal>
+              <h3 class="nss-about__cardTitle" data-translate="aboutCard5Title">No real money required</h3>
+              <p class="nss-about__cardText" data-translate="aboutCard5Text">You start with credits. Your wallet stays untouched. Your lessons do not have to be expensive.</p>
+            </article>
+          </div>
+
+          <p class="nss-about__smirk" data-reveal data-translate="aboutSmirk">Lose fake money here so you do not lose real money later.</p>
+
+          <section class="nss-about__founder" aria-label="About the Founder" data-reveal>
+            <div class="nss-about__founderCard">
+              <div class="nss-about__founderMedia">
+                <img class="nss-about__founderImg" src="founder2.jpg" alt="Subigya Raj Kharel" loading="lazy" />
+              </div>
+
+              <div class="nss-about__founderBody">
+                <div class="nss-about__kicker" data-translate="aboutFounderKicker">About the Founder</div>
+                <h3 class="nss-about__founderName" data-translate="aboutFounderName">Subigya Raj Kharel</h3>
+                <div class="nss-about__founderNameNepali" lang="ne" data-translate="aboutFounderNameNepali">सुबिज्ञ राज खरेल</div>
+                <div class="nss-about__founderRole" data-translate="aboutFounderRole">Founder of Arthyq</div>
+                <p class="nss-about__founderBio" data-translate="aboutFounderBio">I am a student developer focused on making finance education simple, practical, and accessible for Nepali learners. Arthyq is built to help beginners practice investing concepts with clarity, confidence, and zero real world risk.</p>
+
+                <div class="nss-about__meta">
+                  <div class="nss-about__metaCol">
+                    <div class="nss-about__metaLabel" data-translate="aboutContactLabel">Contact</div>
+                    <div class="nss-about__metaItem">
+                      <span class="nss-about__metaIcon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                          <path d="M4 6.5h16a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 16V8A1.5 1.5 0 0 1 4 6.5Zm0 1.5v.18l8 4.8 8-4.8V8H4Zm16 8v-5.76l-7.4 4.44a1 1 0 0 1-1.2 0L4 10.24V16h16Z" fill="currentColor"/>
+                        </svg>
+                      </span>
+                      <a class="nss-about__metaLink" href="mailto:subigyadev@gmail.com">subigyadev@gmail.com</a>
+                    </div>
+                    <div class="nss-about__metaItem">
+                      <span class="nss-about__metaIcon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                          <path d="M7.1 3.5a1.8 1.8 0 0 1 1.8 1.4l.6 2.6a1.8 1.8 0 0 1-.5 1.7l-1.2 1.2a12.7 12.7 0 0 0 5.8 5.8l1.2-1.2a1.8 1.8 0 0 1 1.7-.5l2.6.6a1.8 1.8 0 0 1 1.4 1.8v2a1.9 1.9 0 0 1-2 2c-8.2 0-14.9-6.7-14.9-14.9a1.9 1.9 0 0 1 2-2h2Z" fill="currentColor"/>
+                        </svg>
+                      </span>
+                      <a class="nss-about__metaLink" href="tel:9823568381" data-localize-numbers><span class="np-number">9823568381</span></a>
+                    </div>
+                  </div>
+
+                  <div class="nss-about__metaCol">
+                    <div class="nss-about__metaLabel" data-translate="aboutLinksLabel">Links</div>
+                    <div class="nss-about__btnRow">
+                      <a class="nss-about__btn" href="https://www.linkedin.com/in/subigya-kharel/" target="_blank" rel="noopener" aria-label="LinkedIn" title="LinkedIn">
+                        <span class="nss-about__btnIcon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                            <path d="M6.2 9.2h3.3V20H6.2V9.2Zm1.7-5.2a1.9 1.9 0 1 1 0 3.8 1.9 1.9 0 0 1 0-3.8ZM11.4 9.2h3.2v1.5c.5-.9 1.6-1.7 3.3-1.7 3.5 0 4.1 2.3 4.1 5.3V20h-3.3v-4.5c0-1.1 0-2.5-1.6-2.5-1.6 0-1.9 1.2-1.9 2.4V20h-3.3V9.2Z" fill="currentColor"/>
+                          </svg>
+                        </span>
+                        <span class="nss-about__sr" data-translate="aboutLinkedIn">LinkedIn</span>
+                      </a>
+                      <a class="nss-about__btn" href="mailto:subigyadev@gmail.com" aria-label="Email" title="Email">
+                        <span class="nss-about__btnIcon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                            <path d="M4 6.5h16a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 16V8A1.5 1.5 0 0 1 4 6.5Zm0 1.5v.18l8 4.8 8-4.8V8H4Zm16 8v-5.76l-7.4 4.44a1 1 0 0 1-1.2 0L4 10.24V16h16Z" fill="currentColor"/>
+                          </svg>
+                        </span>
+                        <span class="nss-about__sr" data-translate="aboutEmailButton">Email</span>
+                      </a>
+                      <a class="nss-about__btn" href="tel:9823568381" aria-label="Call" title="Call">
+                        <span class="nss-about__btnIcon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                            <path d="M7.1 3.5a1.8 1.8 0 0 1 1.8 1.4l.6 2.6a1.8 1.8 0 0 1-.5 1.7l-1.2 1.2a12.7 12.7 0 0 0 5.8 5.8l1.2-1.2a1.8 1.8 0 0 1 1.7-.5l2.6.6a1.8 1.8 0 0 1 1.4 1.8v2a1.9 1.9 0 0 1-2 2c-8.2 0-14.9-6.7-14.9-14.9a1.9 1.9 0 0 1 2-2h2Z" fill="currentColor"/>
+                          </svg>
+                        </span>
+                        <span class="nss-about__sr" data-translate="aboutCallButton">Call</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  <div class="nss-about__metaCol">
+                    <div class="nss-about__metaLabel" data-translate="aboutNssLabel">Arthyq</div>
+                    <div class="nss-about__btnRow">
+                      <a class="nss-about__btn nss-about__btn--soft" href="https://www.instagram.com/nepalstocksimulator/" target="_blank" rel="noopener" aria-label="Instagram" title="Instagram">
+                        <span class="nss-about__btnIcon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                            <path d="M8 4.5h8A3.5 3.5 0 0 1 19.5 8v8A3.5 3.5 0 0 1 16 19.5H8A3.5 3.5 0 0 1 4.5 16V8A3.5 3.5 0 0 1 8 4.5Zm4 3.2a4.3 4.3 0 1 0 0 8.6 4.3 4.3 0 0 0 0-8.6Zm0 1.6a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4Zm4.8-.9a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" fill="currentColor"/>
+                          </svg>
+                        </span>
+                        <span class="nss-about__sr" data-translate="aboutInstagram">Instagram</span>
+                      </a>
+                      <a class="nss-about__btn nss-about__btn--soft" href="https://www.youtube.com/@nepalstocksimulator" target="_blank" rel="noopener" aria-label="YouTube" title="YouTube">
+                        <span class="nss-about__btnIcon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" role="img" focusable="false" aria-hidden="true">
+                            <path d="M21.5 8.1a2.7 2.7 0 0 0-1.9-2c-1.7-.4-8.6-.4-8.6-.4s-6.9 0-8.6.4a2.7 2.7 0 0 0-1.9 2A28.8 28.8 0 0 0 0 12a28.8 28.8 0 0 0 .5 3.9 2.7 2.7 0 0 0 1.9 2c1.7.4 8.6.4 8.6.4s6.9 0 8.6-.4a2.7 2.7 0 0 0 1.9-2A28.8 28.8 0 0 0 22 12a28.8 28.8 0 0 0-.5-3.9ZM9.6 15.4V8.6l5.9 3.4-5.9 3.4Z" fill="currentColor"/>
+                          </svg>
+                        </span>
+                        <span class="nss-about__sr" data-translate="aboutYouTube">YouTube</span>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- Playground: QUIZ + CHART GAME -->
+    <section id="playground" style="display: none;">
+      <div class="playground-section">
+        <div class="playground-header">
+          <h2 data-translate="playgroundTitle">Playground</h2>
+          <p data-translate="playgroundDescription">Practice faster with mini games built for NSE trading intuition.</p>
+        </div>
+
+        <!-- QUIZ (codex) -->
+        <div class="playground-card">
+          <div class="playground-card-header">
+            <h3 data-quiz-translate="quizTitle"></h3>
+            <p data-quiz-translate="quizSubtitle"></p>
+          </div>
+          <div class="playground-quiz-intro">
+            <h4 data-quiz-translate="quizIntroTitle"></h4>
+            <p data-quiz-translate="quizIntroDesc"></p>
+            <button id="quizLaunch" class="quiz-secondary-btn" type="button" data-quiz-translate="quizLaunch"></button>
+          </div>
+          <div id="quizContent" class="quiz-content is-hidden" aria-live="polite"></div>
+        </div>
+
+        <!-- CHART GAME (main) -->
+        <div class="playground-block chart-game-block">
+          <div class="playground-card chart-game-card">
+            <div class="playground-card-header">
+              <h3 data-translate="chartGameTitle">Chart Trading Game</h3>
+              <p data-translate="chartGameSubtitle">Press and hold to buy, release to sell</p>
+            </div>
+            <p class="playground-card-description" data-translate="chartGameDescription">
+              Master the press and hold trading rhythm with simulated NEPSE charts.
+            </p>
+            <div class="playground-howto" data-animate="howto">
+              <p data-translate="chartGameHowtoLine1">Press and hold on the chart to buy at the current price.</p>
+              <p data-translate="chartGameHowtoLine2">Keep holding while the price moves.</p>
+              <p data-translate="chartGameHowtoLine3">Release to sell. Beat the Buy &amp; Hold score.</p>
+            </div>
+            <button class="playground-primary-btn" id="openChartGame" data-translate="chartGamePlayButton">Play me!</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Chart Game Modal (main) -->
+  <div id="chartGameModal" class="chart-game-modal" aria-hidden="true">
+    <div class="chart-game-shell">
+      <div class="chart-game-header">
+        <div class="chart-game-title">
+          <h2 data-translate="chartGameModalTitle">Chart Trading Game</h2>
+          <p id="chartGameMeta" class="chart-game-meta"></p>
+        </div>
+        <button class="chart-game-close" id="chartGameClose" data-translate="chartGameExit">Exit to Playground</button>
+      </div>
+
+      <div class="chart-game-scoreboard">
+        <div class="score-item">
+          <span data-translate="chartGameProgressLabel">Progress</span>
+          <strong id="chartGameProgress" class="np-number">0/160</strong>
+        </div>
+        <div class="score-item">
+          <span data-translate="chartGameCurrentReturnLabel">Current Return</span>
+          <strong id="chartGameCurrentReturn" class="np-number">0%</strong>
+        </div>
+        <div class="score-item">
+          <span data-translate="chartGameTotalReturnLabel">Total Return</span>
+          <strong id="chartGameTotalReturn" class="np-number">0%</strong>
+        </div>
+      </div>
+
+      <div class="chart-game-chart-wrapper" id="chartGameChartArea">
+        <canvas id="chartGameCanvas"></canvas>
+        <div class="chart-game-hint" data-translate="chartGameHint">Press &amp; hold to buy</div>
+      </div>
+
+      <div class="chart-game-results" id="chartGameResults" aria-hidden="true">
+        <div class="chart-game-results-card">
+          <h3 data-translate="chartGameResultsTitle">Round Results</h3>
+
+          <div class="chart-game-results-row">
+            <span data-translate="chartGameYourReturnLabel">Your return</span>
+            <strong id="chartGameYourReturn" class="np-number">0%</strong>
+          </div>
+
+          <div class="chart-game-results-row">
+            <span data-translate="chartGameBuyHoldLabel">Buy &amp; Hold</span>
+            <strong id="chartGameBuyHold" class="np-number">0%</strong>
+          </div>
+
+          <p id="chartGameStatusMessage"></p>
+
+          <div class="chart-game-results-actions">
+            <button id="chartGameRestart" class="chart-game-btn secondary" data-translate="chartGameRestart">Restart round</button>
+            <button id="chartGameNewRound" class="chart-game-btn secondary" data-translate="chartGameNewRound">New round</button>
+            <button id="chartGameExit" class="chart-game-btn" data-translate="chartGameExit">Exit to Playground</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trade Modal -->
+
+  <div id="tradeModal" class="trade-modal" role="dialog" aria-modal="true" aria-labelledby="tradeModalTitle" aria-hidden="true">
+    <div class="trade-modal-content">
+      <div class="trade-modal-header">
+        <h2 id="tradeModalTitle">Trade Stock</h2>
+      </div>
+      
+      <div class="stock-details">
+        <div class="stock-detail-item">
+          <label>Symbol</label>
+          <div class="value" id="modalStockSymbol">-</div>
+        </div>
+        <div class="stock-detail-item">
+          <label>Current Price</label>
+          <div class="value" id="modalStockPrice">-</div>
+        </div>
+      </div>
+
+      <div class="trade-input-group">
+        <label for="modalTradeShares">Shares to Buy</label>
+        <input type="number" id="modalTradeShares" min="10" step="1" placeholder="Enter number of shares">
+      </div>
+
+      <div class="quantity-preview">
+        <p>Share price: <span id="modalPricePreview" class="np-number">0</span> credits</p>
+        <p data-localize-numbers><span class="np-number">0.6%</span> broker fee: <span id="modalBrokerFeePreview" class="np-number">0</span> credits</p>
+        <p data-localize-numbers><span class="np-number">0.015%</span> SEBON fee: <span id="modalSebonFeePreview" class="np-number">0</span> credits</p>
+        <p data-localize-numbers><span class="np-number">0.1%</span> DP fee: <span id="modalDpFeePreview" class="np-number">0</span> credits</p>
+        <p>Total: <span class="quantity np-number" id="modalCostPreview">0</span> credits</p>
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn back" onclick="closeTradeModal()">Back</button>
+        <button class="modal-btn confirm" onclick="confirmTrade()">Confirm Trade</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="nss.js"></script>
+</body>
+</html>
