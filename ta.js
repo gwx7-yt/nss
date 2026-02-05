@@ -172,11 +172,24 @@
 
   function renderSearchResults(filtered) {
     const results = document.getElementById('taCompanyResults');
+    results.replaceChildren();
+
     if (!filtered.length) {
       results.style.display = 'none';
       return;
     }
-    results.innerHTML = filtered.slice(0, 10).map((item) => { const secId = item.id ?? item.securityId; const symbol = item.symbol || item.stockSymbol || `#${secId}`; const name = item.companyName || item.securityName || symbol; return `<div class="ta-company-item" data-id="${secId}">${symbol} - ${name}</div>`; }).join('');
+
+    filtered.slice(0, 10).forEach((item) => {
+      const secId = item.id ?? item.securityId;
+      const symbol = item.symbol || item.stockSymbol || `#${secId}`;
+      const name = item.companyName || item.securityName || symbol;
+      const row = document.createElement('div');
+      row.className = 'ta-company-item';
+      row.dataset.id = String(secId);
+      row.textContent = `${symbol} - ${name}`;
+      results.appendChild(row);
+    });
+
     results.style.display = 'block';
   }
 

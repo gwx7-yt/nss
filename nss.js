@@ -779,19 +779,23 @@ async function tickHomeDashboard() {
   let dataUpdated = false;
 
   try {
-    let nepseIndex = null;
-    [priceVolume, sectorOverview, nepseIndex] = await Promise.all([
+    [priceVolume, sectorOverview] = await Promise.all([
       fetchHomeData(`${API_BASE}/PriceVolume`),
-      fetchHomeData(`${API_BASE}/SectorOverview`),
-      fetchHomeData(`${API_BASE}/api/nepse-index`)
+      fetchHomeData(`${API_BASE}/SectorOverview`)
     ]);
     homeDashboardState.latestPriceVolume = priceVolume;
     homeDashboardState.latestSectorOverview = sectorOverview;
-    homeDashboardState.latestNepseIndex = nepseIndex;
     dataUpdated = true;
   } catch (error) {
     priceVolume = homeDashboardState.latestPriceVolume;
     sectorOverview = homeDashboardState.latestSectorOverview;
+  }
+
+  try {
+    const nepseIndex = await fetchHomeData(`${API_BASE}/api/nepse-index`);
+    homeDashboardState.latestNepseIndex = nepseIndex;
+  } catch (error) {
+    // Keep existing index value if index proxy is unavailable.
   }
 
   if (priceVolume && sectorOverview && dataUpdated) {
