@@ -11,6 +11,9 @@ import psycopg2
 from psycopg2 import extras
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import requests, certifi
+
+
 
 from nepse import Nepse
 
@@ -54,7 +57,14 @@ routes = {
     "SectorOverview": "/SectorOverview",
     "NepseIndex": "/api/nepse-index",
 }
-
+r = requests.get(
+    url,
+    headers=headers,
+    timeout=15,
+    verify=certifi.where()
+)
+r.raise_for_status()
+data = r.json()
 # In-memory storage for simulated trades
 simulated_trades = {}
 
