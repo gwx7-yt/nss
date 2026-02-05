@@ -1,7 +1,11 @@
 from datetime import date, datetime, timedelta
 import os
+import math
+import threading
+import time
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
+import httpx
 import pandas as pd
 import psycopg2
 from psycopg2 import extras
@@ -15,6 +19,24 @@ CORS(app)
 
 nepse = Nepse()
 nepse.setTLSVerification(False)
+
+NEPSE_BASE = os.environ.get("NEPSE_BASE", "https://www.nepalstock.com").rstrip("/")
+NEPSE_DEFAULT_HEADERS = {
+    "User-Agent": os.environ.get(
+        "NEPSE_USER_AGENT",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    ),
+    "Referer": os.environ.get("NEPSE_REFERER", "https://www.nepalstock.com/"),
+    "Accept": "application/json, text/plain, */*",
+}
+CACHE_TTL_SECONDS = 15 * 60
+RATE_LIMIT_MAX_REQUESTS = 30
+RATE_LIMIT_WINDOW_SECONDS = 60
+_cache_lock = threading.Lock()
+_cache_store = {}
+_rate_limit_lock = threading.Lock()
+_rate_limit_bucket = {}
 
 routes = {
     "PriceVolume": "/PriceVolume",
@@ -30,6 +52,7 @@ routes = {
     "SimulateTrade": "/simulateTrade",
     "CheckProfitLoss": "/checkProfitLoss",
     "SectorOverview": "/SectorOverview",
+    "NepseIndex": "/api/nepse-index",
 }
 
 # In-memory storage for simulated trades
@@ -52,6 +75,390 @@ def _safe_int(value, default=None):
         return int(float(str(value).replace(",", "")))
     except (TypeError, ValueError):
         return default
+
+
+def _cache_get(key):
+    now = time.time()
+    with _cache_lock:
+        entry = _cache_store.get(key)
+        if not entry:
+            return None
+        if now - entry["ts"] >= CACHE_TTL_SECONDS:
+            _cache_store.pop(key, None)
+            return None
+        return entry["value"]
+
+
+def _cache_set(key, value):
+    with _cache_lock:
+        _cache_store[key] = {"ts": time.time(), "value": value}
+
+
+def _safe_json_number(value):
+    if value is None:
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return float(value)
+
+
+def _parse_time_to_unix_seconds(value):
+    if value in (None, ""):
+        return None
+
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        if numeric > 1_000_000_000_000:
+            return int(numeric / 1000)
+        if numeric > 1_000_000_000:
+            return int(numeric)
+        return None
+
+    value_str = str(value).strip()
+    if not value_str:
+        return None
+
+    try:
+        numeric = float(value_str)
+        if numeric > 1_000_000_000_000:
+            return int(numeric / 1000)
+        if numeric > 1_000_000_000:
+            return int(numeric)
+    except ValueError:
+        pass
+
+    date_value = value_str.replace("Z", "+00:00")
+    formats = [
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+    ]
+
+    try:
+        parsed = datetime.fromisoformat(date_value)
+        return int(parsed.timestamp())
+    except ValueError:
+        pass
+
+    for fmt in formats:
+        try:
+            parsed = datetime.strptime(value_str, fmt)
+            return int(parsed.timestamp())
+        except ValueError:
+            continue
+
+    return None
+
+
+def _enforce_rate_limit(route_name):
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",", 1)[0].strip()
+
+    key = f"{route_name}:{client_ip}"
+    now = time.time()
+
+    with _rate_limit_lock:
+        bucket = _rate_limit_bucket.get(key)
+        if not bucket or now - bucket["window_start"] >= RATE_LIMIT_WINDOW_SECONDS:
+            _rate_limit_bucket[key] = {"window_start": now, "count": 1}
+            return None
+
+        bucket["count"] += 1
+        if bucket["count"] > RATE_LIMIT_MAX_REQUESTS:
+            retry_after = max(1, int(RATE_LIMIT_WINDOW_SECONDS - (now - bucket["window_start"])))
+            return jsonify({"error": "Rate limit exceeded", "retryAfter": retry_after}), 429
+
+    return None
+
+
+def _extract_candles_from_history_payload(payload):
+    if isinstance(payload, list):
+        return payload
+
+    if not isinstance(payload, dict):
+        return []
+
+    for key in ["content", "data", "history", "ohlc", "candles", "rows", "items"]:
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            for nested_key in ["content", "data", "rows", "items"]:
+                nested_val = value.get(nested_key)
+                if isinstance(nested_val, list):
+                    return nested_val
+
+    return []
+
+
+def _normalize_candle_row(raw):
+    if not isinstance(raw, dict):
+        return None
+
+    time_value = (
+        raw.get("time")
+        or raw.get("timestamp")
+        or raw.get("date")
+        or raw.get("businessDate")
+        or raw.get("tradeDate")
+    )
+    unix_time = _parse_time_to_unix_seconds(time_value)
+
+    open_price = _safe_float(raw.get("open") if raw.get("open") is not None else raw.get("openPrice"))
+    high_price = _safe_float(raw.get("high") if raw.get("high") is not None else raw.get("highPrice"))
+    low_price = _safe_float(raw.get("low") if raw.get("low") is not None else raw.get("lowPrice"))
+    close_price = _safe_float(
+        raw.get("close")
+        if raw.get("close") is not None
+        else raw.get("closePrice", raw.get("lastTradedPrice"))
+    )
+    volume = _safe_float(
+        raw.get("volume")
+        if raw.get("volume") is not None
+        else raw.get("totalTradeQuantity", raw.get("lastTradedVolume"))
+    )
+
+    if (
+        unix_time is None
+        or open_price is None
+        or high_price is None
+        or low_price is None
+        or close_price is None
+    ):
+        return None
+
+    return {
+        "time": int(unix_time),
+        "open": _safe_json_number(open_price),
+        "high": _safe_json_number(high_price),
+        "low": _safe_json_number(low_price),
+        "close": _safe_json_number(close_price),
+        "volume": _safe_json_number(volume) or 0.0,
+    }
+
+
+def _fetch_nepse_json(path):
+    url = f"{NEPSE_BASE}{path}"
+    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+        response = client.get(url, headers=NEPSE_DEFAULT_HEADERS)
+        response.raise_for_status()
+        return response.json()
+
+
+def _fetch_symbol_for_security(security_id):
+    try:
+        payload = _fetch_nepse_json(f"/api/nots/security/{security_id}")
+    except Exception:
+        return str(security_id)
+
+    if isinstance(payload, dict):
+        for key in ["symbol", "stockSymbol", "ticker"]:
+            value = payload.get(key)
+            if value:
+                return str(value)
+        for key in ["data", "content"]:
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                for nested_key in ["symbol", "stockSymbol", "ticker"]:
+                    value = nested.get(nested_key)
+                    if value:
+                        return str(value)
+
+    return str(security_id)
+
+
+def _get_or_fetch_ta_history(security_id):
+    cache_key = f"ta_history:{security_id}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    payload = _fetch_nepse_json(f"/api/nots/market/history/security/{security_id}")
+    rows = _extract_candles_from_history_payload(payload)
+
+    candles = []
+    for row in rows:
+        normalized = _normalize_candle_row(row)
+        if normalized is not None:
+            candles.append(normalized)
+
+    candles.sort(key=lambda item: item["time"])
+
+    history_payload = {
+        "symbol": _fetch_symbol_for_security(security_id),
+        "securityId": security_id,
+        "candles": candles,
+    }
+    _cache_set(cache_key, history_payload)
+    return history_payload
+
+
+def _sma(values, period, times):
+    if len(values) < period:
+        return []
+    output = []
+    window_sum = sum(values[:period])
+    output.append({"time": times[period - 1], "value": _safe_json_number(window_sum / period)})
+    for idx in range(period, len(values)):
+        window_sum += values[idx] - values[idx - period]
+        output.append({"time": times[idx], "value": _safe_json_number(window_sum / period)})
+    return output
+
+
+def _ema(values, period, times):
+    if len(values) < period:
+        return []
+    output = []
+    initial = sum(values[:period]) / period
+    multiplier = 2 / (period + 1)
+    ema_prev = initial
+    output.append({"time": times[period - 1], "value": _safe_json_number(ema_prev)})
+    for idx in range(period, len(values)):
+        ema_prev = ((values[idx] - ema_prev) * multiplier) + ema_prev
+        output.append({"time": times[idx], "value": _safe_json_number(ema_prev)})
+    return output
+
+
+def _rsi_wilder(values, period, times):
+    if len(values) <= period:
+        return []
+
+    gains = []
+    losses = []
+    for idx in range(1, len(values)):
+        change = values[idx] - values[idx - 1]
+        gains.append(max(change, 0))
+        losses.append(abs(min(change, 0)))
+
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+
+    output = []
+    rs = float("inf") if avg_loss == 0 else avg_gain / avg_loss
+    first_rsi = 100 - (100 / (1 + rs))
+    output.append({"time": times[period], "value": _safe_json_number(first_rsi)})
+
+    for idx in range(period, len(gains)):
+        avg_gain = ((avg_gain * (period - 1)) + gains[idx]) / period
+        avg_loss = ((avg_loss * (period - 1)) + losses[idx]) / period
+        rs = float("inf") if avg_loss == 0 else avg_gain / avg_loss
+        rsi_value = 100 - (100 / (1 + rs))
+        output.append({"time": times[idx + 1], "value": _safe_json_number(rsi_value)})
+
+    return output
+
+
+def _ema_values_only(values, period):
+    if len(values) < period:
+        return [], period - 1
+    multiplier = 2 / (period + 1)
+    ema_list = [sum(values[:period]) / period]
+    for idx in range(period, len(values)):
+        ema_list.append(((values[idx] - ema_list[-1]) * multiplier) + ema_list[-1])
+    return ema_list, period - 1
+
+
+def _macd(values, times):
+    ema12, start12 = _ema_values_only(values, 12)
+    ema26, start26 = _ema_values_only(values, 26)
+    if not ema12 or not ema26:
+        return {"macd": [], "signal": [], "hist": []}
+
+    start_idx = max(start12, start26)
+    offset12 = start_idx - start12
+    offset26 = start_idx - start26
+    common_length = min(len(ema12) - offset12, len(ema26) - offset26)
+    if common_length <= 0:
+        return {"macd": [], "signal": [], "hist": []}
+
+    macd_line_vals = []
+    macd_times = []
+    for i in range(common_length):
+        idx_time = start_idx + i
+        macd_line_vals.append(ema12[offset12 + i] - ema26[offset26 + i])
+        macd_times.append(times[idx_time])
+
+    signal_vals, signal_offset = _ema_values_only(macd_line_vals, 9)
+    if not signal_vals:
+        return {"macd": [], "signal": [], "hist": []}
+
+    macd_series = []
+    signal_series = []
+    hist_series = []
+    for i, signal_val in enumerate(signal_vals):
+        idx = i + signal_offset
+        time_val = macd_times[idx]
+        macd_val = macd_line_vals[idx]
+        hist_val = macd_val - signal_val
+        macd_series.append({"time": time_val, "value": _safe_json_number(macd_val)})
+        signal_series.append({"time": time_val, "value": _safe_json_number(signal_val)})
+        hist_series.append({"time": time_val, "value": _safe_json_number(hist_val)})
+
+    return {"macd": macd_series, "signal": signal_series, "hist": hist_series}
+
+
+def _bollinger(values, period, std_multiplier, times):
+    if len(values) < period:
+        return {"upper": [], "middle": [], "lower": []}
+
+    upper = []
+    middle = []
+    lower = []
+
+    for idx in range(period - 1, len(values)):
+        window = values[idx - period + 1 : idx + 1]
+        mean = sum(window) / period
+        variance = sum((x - mean) ** 2 for x in window) / period
+        std_dev = math.sqrt(variance)
+
+        middle_val = _safe_json_number(mean)
+        upper_val = _safe_json_number(mean + (std_multiplier * std_dev))
+        lower_val = _safe_json_number(mean - (std_multiplier * std_dev))
+
+        time_val = times[idx]
+        middle.append({"time": time_val, "value": middle_val})
+        upper.append({"time": time_val, "value": upper_val})
+        lower.append({"time": time_val, "value": lower_val})
+
+    return {"upper": upper, "middle": middle, "lower": lower}
+
+
+def _compute_indicator_series(candles, indicator_names):
+    closes = [c["close"] for c in candles]
+    times = [c["time"] for c in candles]
+    series = {}
+
+    for indicator in indicator_names:
+        if indicator == "sma20":
+            series[indicator] = _sma(closes, 20, times)
+        elif indicator == "ema50":
+            series[indicator] = _ema(closes, 50, times)
+        elif indicator == "rsi14":
+            series[indicator] = _rsi_wilder(closes, 14, times)
+        elif indicator == "macd":
+            series[indicator] = _macd(closes, times)
+        elif indicator == "bb20":
+            series[indicator] = _bollinger(closes, 20, 2, times)
+
+    return series
+
+
+def _get_cached_indicators(security_id, indicators):
+    normalized = sorted(set(indicators))
+    cache_key = f"ta_indicators:{security_id}:{','.join(normalized)}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    history_payload = _get_or_fetch_ta_history(security_id)
+    candles = history_payload.get("candles", [])
+    series = _compute_indicator_series(candles, normalized)
+
+    result = {"securityId": security_id, "series": series}
+    _cache_set(cache_key, result)
+    return result
 
 
 def _normalize_database_url():
@@ -408,6 +815,76 @@ def getSectorOverview():
     }
 
     return jsonify(response)
+
+
+@app.route(routes["NepseIndex"])
+def getNepseIndexProxy():
+    rate_limited = _enforce_rate_limit("nepse_index")
+    if rate_limited:
+        return rate_limited
+
+    cache_key = "nepse_index"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return jsonify(cached)
+
+    try:
+        payload = _fetch_nepse_json("/api/nots/nepse-index")
+        _cache_set(cache_key, payload)
+        return jsonify(payload)
+    except Exception as exc:
+        return jsonify({"error": "Unable to fetch NEPSE index", "details": str(exc)}), 502
+
+
+@app.route("/api/ta/history")
+def get_ta_history():
+    rate_limited = _enforce_rate_limit("ta_history")
+    if rate_limited:
+        return rate_limited
+
+    security_id_raw = request.args.get("securityId")
+    security_id = _safe_int(security_id_raw)
+    if security_id is None:
+        return jsonify({"error": "securityId must be an integer"}), 400
+
+    try:
+        payload = _get_or_fetch_ta_history(security_id)
+        return jsonify(payload)
+    except httpx.HTTPStatusError as exc:
+        return jsonify({"error": "Upstream NEPSE request failed", "status": exc.response.status_code}), 502
+    except Exception as exc:
+        return jsonify({"error": "Unable to fetch TA history", "details": str(exc)}), 502
+
+
+@app.route("/api/ta/indicators")
+def get_ta_indicators():
+    rate_limited = _enforce_rate_limit("ta_indicators")
+    if rate_limited:
+        return rate_limited
+
+    security_id_raw = request.args.get("securityId")
+    security_id = _safe_int(security_id_raw)
+    if security_id is None:
+        return jsonify({"error": "securityId must be an integer"}), 400
+
+    indicators_csv = (request.args.get("indicators") or "").strip().lower()
+    requested = [item.strip() for item in indicators_csv.split(",") if item.strip()]
+    allowed = {"sma20", "ema50", "rsi14", "macd", "bb20"}
+
+    invalid = [name for name in requested if name not in allowed]
+    if invalid:
+        return jsonify({"error": "Unsupported indicators requested", "invalid": invalid}), 400
+
+    if not requested:
+        requested = ["sma20", "ema50", "rsi14", "macd", "bb20"]
+
+    try:
+        payload = _get_cached_indicators(security_id, requested)
+        return jsonify(payload)
+    except httpx.HTTPStatusError as exc:
+        return jsonify({"error": "Upstream NEPSE request failed", "status": exc.response.status_code}), 502
+    except Exception as exc:
+        return jsonify({"error": "Unable to fetch TA indicators", "details": str(exc)}), 502
 
 
 @app.route(routes["AllStocks"])

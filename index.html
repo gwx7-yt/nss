@@ -118,6 +118,10 @@
           <img src="playground-icon.png" alt="Playground" class="nav-img">
           <span data-translate="playgroundNav">Playground</span>
         </a>
+        <a href="#technical-analysis" class="nav-icon">
+          <img src="market-icon.png" alt="Technical Analysis" class="nav-img">
+          <span>TA</span>
+        </a>
       </div>
       <div class="nav-right">
         <div class="credits-display">
@@ -133,6 +137,7 @@
     <section id="home">
       <div class="welcome-section">
         <h1 data-translate="welcome">Welcome</h1>
+        <div id="homeNepseIndexBadge" class="home-index-badge">NEPSE Index: --</div>
         <div class="home-dashboard">
           <div class="home-card home-status-card">
             <div class="home-status-grid">
@@ -286,6 +291,50 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+
+
+    <!-- Technical Analysis Section -->
+    <section id="technical-analysis" style="display: none;">
+      <div class="ta-section">
+        <div class="ta-header">
+          <h2>Technical Analysis</h2>
+          <div class="ta-controls">
+            <div class="ta-search-wrap">
+              <input type="text" id="taCompanySearch" placeholder="Search company name or symbol" autocomplete="off">
+              <div id="taCompanyResults" class="ta-company-results"></div>
+            </div>
+            <select id="taCompanySelect" aria-label="Select company"></select>
+            <button id="taIndicatorToggleBtn" class="ta-indicator-mobile-btn" type="button">Indicators</button>
+          </div>
+        </div>
+
+        <div id="taLoading" class="ta-loading" style="display: none;">
+          <div class="ta-skeleton"></div>
+          <div class="ta-skeleton"></div>
+          <div class="ta-skeleton"></div>
+        </div>
+
+        <div id="taError" class="ta-error" style="display: none;">
+          <p id="taErrorMessage">Unable to load technical analysis data.</p>
+          <button id="taRetryBtn" type="button">Retry</button>
+        </div>
+
+        <div id="taChartArea" class="ta-chart-area">
+          <div class="ta-panel ta-price-panel" id="taPriceChart"></div>
+          <div class="ta-panel ta-volume-panel" id="taVolumeChart"></div>
+          <div class="ta-panel ta-osc-panel" id="taOscChart"></div>
+        </div>
+
+        <aside class="ta-indicators" id="taIndicatorPanel">
+          <label><input type="checkbox" value="sma20"> SMA 20</label>
+          <label><input type="checkbox" value="ema50"> EMA 50</label>
+          <label><input type="checkbox" value="rsi14"> RSI 14</label>
+          <label><input type="checkbox" value="macd"> MACD</label>
+          <label><input type="checkbox" value="bb20"> Bollinger 20</label>
+        </aside>
       </div>
     </section>
 
@@ -724,6 +773,8 @@
     </div>
   </div>
 
+  <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
   <script src="nss.js"></script>
+  <script src="ta.js"></script>
 </body>
 </html>
