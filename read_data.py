@@ -46,7 +46,7 @@ routes = {
     "Summary": "/Summary",
     "TopGainers": "/TopGainers",
     "TopLosers": "/TopLosers",
-    "LiveMarket": "/LiveMarket",
+    "LiveMarket": "/LiveMarket", }
   
 def _safe_float(value, default=None):
     try:
