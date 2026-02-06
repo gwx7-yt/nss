@@ -244,10 +244,15 @@ def _normalize_candle_row(raw):
 
 def _fetch_nepse_json(path):
     url = f"{NEPSE_BASE}{path}"
-    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+    with httpx.Client(
+        timeout=20.0,
+        follow_redirects=True,
+        verify=certifi.where(),
+    ) as client:
         response = client.get(url, headers=NEPSE_DEFAULT_HEADERS)
         response.raise_for_status()
         return response.json()
+
 
 
 def _fetch_symbol_for_security(security_id):
