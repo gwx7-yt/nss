@@ -1196,6 +1196,19 @@ def get_user():
         print(f"Error fetching user data: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
+import socket
+from urllib.parse import urlparse
+
+@app.route("/debug/dns")
+def debug_dns():
+    host = urlparse(NEPSE_BASE).netloc or NEPSE_BASE.replace("https://", "").replace("http://", "")
+    host = host.strip().rstrip("/")
+    try:
+        infos = socket.getaddrinfo(host, 443)
+        ips = sorted({info[4][0] for info in infos})
+        return jsonify({"host": host, "resolved": True, "ips": ips, "nepse_base_repr": repr(NEPSE_BASE)})
+    except Exception as e:
+        return jsonify({"host": host, "resolved": False, "error": str(e), "nepse_base_repr": repr(NEPSE_BASE)}), 500
 
 # Ensure table on startup too (safe, but ensure_ohlc_table is the real safety net)
 try:
@@ -1208,14 +1221,4 @@ if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8000)
     import socket
 
-@app.get("/debug/dns")
-def debug_dns():
-    host = urlparse(NEPSE_BASE).netloc or NEPSE_BASE.replace("https://", "").replace("http://", "")
-    host = host.strip().rstrip("/")
-    try:
-        infos = socket.getaddrinfo(host, 443)
-        ips = sorted({info[4][0] for info in infos})
-        return jsonify({"host": host, "resolved": True, "ips": ips, "nepse_base_repr": repr(NEPSE_BASE)})
-    except Exception as e:
-        return jsonify({"host": host, "resolved": False, "error": str(e), "nepse_base_repr": repr(NEPSE_BASE)}), 500
 
