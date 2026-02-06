@@ -298,6 +298,19 @@ def _fetch_nepse_json(path):
 
     raise last_err
 
+def _fetch_history_via_nepse(security_id):
+    # nepse==0.6.1 has auth/session logic; we must use it for protected endpoints
+    for method_name in [
+        "getSecurityDailyGraph",
+        "getDailyGraph",
+        "getCompanyDailyGraph",
+        "getMarketHistory",
+        "getPriceHistory",
+    ]:
+        fn = getattr(nepse, method_name, None)
+        if callable(fn):
+            return fn(security_id)
+    raise AttributeError("Nepse library does not expose a history/graph method in this version")
 
 
 
@@ -328,8 +341,7 @@ def _get_or_fetch_ta_history(security_id):
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
-
-    payload = _fetch_nepse_json(f"/api/nots/market/history/security/{security_id}")
+payload = _fetch_history_via_nepse(security_id)
     rows = _extract_candles_from_history_payload(payload)
 
     candles = []
