@@ -47,28 +47,7 @@ routes = {
     "TopGainers": "/TopGainers",
     "TopLosers": "/TopLosers",
     "LiveMarket": "/LiveMarket",
-    "IsNepseOpen": "/IsNepseOpen",
-    "CompanyList": "/CompanyList",
-    "SecurityList": "/SecurityList",
-    "AllStocks": "/AllStocks",
-    "StockPrice": "/StockPrice",
-    "SimulateTrade": "/simulateTrade",
-    "CheckProfitLoss": "/checkProfitLoss",
-    "SectorOverview": "/SectorOverview",
-    "NepseIndex": "/api/nepse-index",
-}
-r = requests.get(
-    url,
-    headers=headers,
-    timeout=15,
-    verify=certifi.where()
-)
-r.raise_for_status()
-data = r.json()
-# In-memory storage for simulated trades
-simulated_trades = {}
-
-
+  
 def _safe_float(value, default=None):
     try:
         if value in (None, ""):
