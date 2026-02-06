@@ -46,7 +46,21 @@ routes = {
     "Summary": "/Summary",
     "TopGainers": "/TopGainers",
     "TopLosers": "/TopLosers",
-    "LiveMarket": "/LiveMarket", }
+    "LiveMarket": "/LiveMarket",
+    "IsNepseOpen": "/IsNepseOpen",
+    "CompanyList": "/CompanyList",
+    "SecurityList": "/SecurityList",
+    "AllStocks": "/AllStocks",
+    "StockPrice": "/StockPrice",
+    "SimulateTrade": "/simulateTrade",
+    "CheckProfitLoss": "/checkProfitLoss",
+    "SectorOverview": "/SectorOverview",
+    "NepseIndex": "/api/nepse-index",
+}
+
+# In-memory storage for simulated trades
+simulated_trades = {}
+
   
 def _safe_float(value, default=None):
     try:
