@@ -298,19 +298,61 @@ def _fetch_nepse_json(path):
 
     raise last_err
 
+def _get_nepse_session():
+    # Try common attribute names used by different versions/implementations
+    candidates = [
+        "session",
+        "_session",
+        "_Nepse__session",
+        "client",
+        "_client",
+        "_Nepse__client",
+        "s",
+        "_s",
+    ]
+
+    for name in candidates:
+        obj = getattr(nepse, name, None)
+        if obj is None:
+            continue
+
+        # Direct requests.Session-like
+        if hasattr(obj, "get") and hasattr(obj, "cookies"):
+            return obj
+
+        # Wrapped client that contains a session
+        inner = getattr(obj, "session", None)
+        if inner is not None and hasattr(inner, "get") and hasattr(inner, "cookies"):
+            return inner
+
+    # Last resort: scan attributes for something session-ish
+    for name in dir(nepse):
+        if "session" not in name.lower():
+            continue
+        obj = getattr(nepse, name, None)
+        if obj is not None and hasattr(obj, "get") and hasattr(obj, "cookies"):
+            return obj
+
+    return None
+
+
 def _fetch_history_via_nepse(security_id):
-    # nepse==0.6.1 has auth/session logic; we must use it for protected endpoints
-    for method_name in [
-        "getSecurityDailyGraph",
-        "getDailyGraph",
-        "getCompanyDailyGraph",
-        "getMarketHistory",
-        "getPriceHistory",
-    ]:
-        fn = getattr(nepse, method_name, None)
-        if callable(fn):
-            return fn(security_id)
-    raise AttributeError("Nepse library does not expose a history/graph method in this version")
+    sess = _get_nepse_session()
+    if sess is None:
+        raise AttributeError("Could not locate an authenticated session inside Nepse() instance")
+
+    # This endpoint is protected (401 if you call it raw). Using nepse's session should carry cookies/tokens.
+    url = f"{NEPSE_BASE}/api/nots/market/history/security/{security_id}"
+
+    r = sess.get(
+        url,
+        headers=NEPSE_DEFAULT_HEADERS,
+        timeout=20,
+        verify=False,  # match nepse.setTLSVerification(False)
+    )
+    r.raise_for_status()
+    return r.json()
+
 
 
 
