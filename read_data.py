@@ -341,17 +341,22 @@ def _fetch_history_via_nepse(security_id):
     if sess is None:
         raise AttributeError("Could not locate an authenticated session inside Nepse() instance")
 
-    # This endpoint is protected (401 if you call it raw). Using nepse's session should carry cookies/tokens.
     url = f"{NEPSE_BASE}/api/nots/market/history/security/{security_id}"
 
-    r = sess.get(
-        url,
-        headers=NEPSE_DEFAULT_HEADERS,
-        timeout=20,
-        verify=False,  # match nepse.setTLSVerification(False)
-    )
-    r.raise_for_status()
-    return r.json()
+    # Works for httpx.Client (no verify kw) and requests.Session
+    try:
+        resp = sess.get(
+            url,
+            headers=NEPSE_DEFAULT_HEADERS,
+            timeout=20,
+        )
+    except TypeError:
+        # fallback for other client signatures
+        resp = sess.get(url)
+
+    # httpx response has raise_for_status(), requests response too
+    resp.raise_for_status()
+    return resp.json()
 
 
 
