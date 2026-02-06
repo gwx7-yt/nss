@@ -243,17 +243,17 @@ def _normalize_candle_row(raw):
         "volume": _safe_json_number(volume) or 0.0,
     }
 
-
 def _fetch_nepse_json(path):
     url = f"{NEPSE_BASE}{path}"
-    with httpx.Client(
-        timeout=20.0,
-        follow_redirects=True,
-        verify=certifi.where(),
-    ) as client:
-        response = client.get(url, headers=NEPSE_DEFAULT_HEADERS)
-        response.raise_for_status()
-        return response.json()
+    r = requests.get(
+        url,
+        headers=NEPSE_DEFAULT_HEADERS,
+        timeout=20,
+        verify=certifi.where()
+    )
+    r.raise_for_status()
+    return r.json()
+
 
 
 
