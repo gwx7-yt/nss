@@ -243,16 +243,55 @@ def _normalize_candle_row(raw):
         "volume": _safe_json_number(volume) or 0.0,
     }
 
+from requests.exceptions import SSLError, RequestException
+
 def _fetch_nepse_json(path):
-    url = f"{NEPSE_BASE}{path}"
-    r = requests.get(
-        url,
-        headers=NEPSE_DEFAULT_HEADERS,
-        timeout=20,
-        verify=certifi.where()
-    )
-    r.raise_for_status()
-    return r.json()
+    bases = [
+        NEPSE_BASE,
+        "https://www.nepalstock.com",
+        "https://nepalstock.com",
+        "https://newweb.nepalstock.com.np",
+    ]
+
+    last_err = None
+
+    for base in bases:
+        base = (base or "").strip().rstrip("/")
+        if not base:
+            continue
+
+        url = f"{base}{path}"
+
+        # 1) Try with verification (best practice)
+        try:
+            r = requests.get(
+                url,
+                headers=NEPSE_DEFAULT_HEADERS,
+                timeout=20,
+                verify=certifi.where(),
+            )
+            r.raise_for_status()
+            return r.json()
+        except SSLError:
+            # 2) Fallback: disable verification (matches nepse.setTLSVerification(False))
+            try:
+                r = requests.get(
+                    url,
+                    headers=NEPSE_DEFAULT_HEADERS,
+                    timeout=20,
+                    verify=False,
+                )
+                r.raise_for_status()
+                return r.json()
+            except Exception as e:
+                last_err = e
+                continue
+        except RequestException as e:
+            last_err = e
+            continue
+
+    raise last_err
+
 
 
 
