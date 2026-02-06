@@ -341,7 +341,8 @@ def _get_or_fetch_ta_history(security_id):
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
-payload = _fetch_history_via_nepse(security_id)
+
+    payload = _fetch_history_via_nepse(security_id)
     rows = _extract_candles_from_history_payload(payload)
 
     candles = []
@@ -357,6 +358,7 @@ payload = _fetch_history_via_nepse(security_id)
         "securityId": security_id,
         "candles": candles,
     }
+
     _cache_set(cache_key, history_payload)
     return history_payload
 
