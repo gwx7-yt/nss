@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+import json
 import os
 import math
 import threading
@@ -63,6 +64,7 @@ routes = {
 # In-memory storage for simulated trades
 simulated_trades = {}
 
+OHLC_HISTORY_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "ohlc_history.json")
   
 def _safe_float(value, default=None):
     try:
@@ -154,6 +156,54 @@ def _parse_time_to_unix_seconds(value):
             continue
 
     return None
+
+
+def _ensure_ohlc_history_store():
+    directory = os.path.dirname(OHLC_HISTORY_PATH)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
+    if not os.path.exists(OHLC_HISTORY_PATH):
+        empty_payload = {"updatedAt": None, "symbols": {}}
+        with open(OHLC_HISTORY_PATH, "w", encoding="utf-8") as handle:
+            json.dump(empty_payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _load_ohlc_history():
+    if not os.path.exists(OHLC_HISTORY_PATH):
+        return {"updatedAt": None, "symbols": {}}, "OHLC history store not found"
+
+    try:
+        with open(OHLC_HISTORY_PATH, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"updatedAt": None, "symbols": {}}, f"Unable to read OHLC history store: {exc}"
+
+    if not isinstance(payload, dict):
+        return {"updatedAt": None, "symbols": {}}, "OHLC history store has invalid format"
+
+    symbols = payload.get("symbols")
+    if not isinstance(symbols, dict):
+        payload["symbols"] = {}
+
+    return payload, None
+
+
+def _save_ohlc_history(payload):
+    _ensure_ohlc_history_store()
+    directory = os.path.dirname(OHLC_HISTORY_PATH)
+    temp_path = os.path.join(directory, "ohlc_history.json.tmp")
+    with open(temp_path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+    os.replace(temp_path, OHLC_HISTORY_PATH)
+
+
+def _get_ohlc_candles_for_symbol(symbol):
+    payload, message = _load_ohlc_history()
+    candles = payload.get("symbols", {}).get(symbol.upper(), [])
+    if not isinstance(candles, list):
+        candles = []
+    return candles, message
 
 
 def _enforce_rate_limit(route_name):
@@ -389,20 +439,27 @@ def _get_or_fetch_ta_history(security_id):
     if cached is not None:
         return cached
 
-    payload = _fetch_nepse_json(f"/api/nots/market/graphdata/daily/{security_id}")
-
-    rows = _extract_candles_from_history_payload(payload)
-
+    symbol = _fetch_symbol_for_security(security_id)
+    raw_candles, _ = _get_ohlc_candles_for_symbol(symbol)
     candles = []
-    for row in rows:
-        normalized = _normalize_candle_row(row)
+    for row in raw_candles:
+        normalized = _normalize_candle_row(
+            {
+                "date": row.get("date"),
+                "open": row.get("open"),
+                "high": row.get("high"),
+                "low": row.get("low"),
+                "close": row.get("close"),
+                "volume": row.get("volume"),
+            }
+        )
         if normalized is not None:
             candles.append(normalized)
 
     candles.sort(key=lambda item: item["time"])
 
     history_payload = {
-        "symbol": _fetch_symbol_for_security(security_id),
+        "symbol": symbol,
         "securityId": security_id,
         "candles": candles,
     }
@@ -1156,6 +1213,91 @@ def ohlc_refresh_now():
     return jsonify(result)
 
 
+@app.route("/api/ohlc/snapshot", methods=["POST"])
+def ohlc_snapshot():
+    today_str = date.today().isoformat()
+    _ensure_ohlc_history_store()
+    payload, _ = _load_ohlc_history()
+    symbols = payload.get("symbols", {})
+    if not isinstance(symbols, dict):
+        symbols = {}
+        payload["symbols"] = symbols
+
+    updated_symbols = set()
+    for row in nepse.getPriceVolume():
+        symbol = str(row.get("symbol", "")).upper()
+        if not symbol:
+            continue
+
+        open_price = _safe_float(row.get("openPrice"))
+        high_price = _safe_float(row.get("highPrice"))
+        low_price = _safe_float(row.get("lowPrice"))
+        close_price = _safe_float(row.get("lastTradedPrice"))
+
+        volume_value = row.get("lastTradedVolume")
+        if volume_value is None:
+            volume_value = row.get("totalTradeQuantity")
+        volume = _safe_float(volume_value)
+
+        if None in (open_price, high_price, low_price, close_price):
+            continue
+
+        new_entry = {
+            "date": today_str,
+            "open": open_price,
+            "high": high_price,
+            "low": low_price,
+            "close": close_price,
+            "volume": volume or 0.0,
+        }
+
+        candles = symbols.setdefault(symbol, [])
+        if not isinstance(candles, list):
+            candles = []
+            symbols[symbol] = candles
+
+        replaced = False
+        for idx, candle in enumerate(candles):
+            if candle.get("date") == today_str:
+                candles[idx] = new_entry
+                replaced = True
+                break
+        if not replaced:
+            candles.append(new_entry)
+
+        candles.sort(key=lambda item: item.get("date") or "")
+        updated_symbols.add(symbol)
+
+    payload["updatedAt"] = datetime.utcnow().isoformat() + "Z"
+    _save_ohlc_history(payload)
+
+    return jsonify({"symbolsUpdated": len(updated_symbols), "date": today_str})
+
+
+@app.route("/api/ohlc/history")
+def ohlc_history():
+    symbol = (request.args.get("symbol") or "").upper()
+    if not symbol:
+        return jsonify({"error": "symbol is required"}), 400
+
+    limit_param = request.args.get("limit", "90")
+    try:
+        limit = int(limit_param)
+    except ValueError:
+        return jsonify({"error": "limit must be an integer"}), 400
+
+    candles, message = _get_ohlc_candles_for_symbol(symbol)
+    candles_sorted = sorted(candles, key=lambda item: item.get("date") or "")
+    if limit > 0:
+        candles_sorted = candles_sorted[-limit:]
+
+    response = {"symbol": symbol, "candles": candles_sorted}
+    if message and not candles_sorted:
+        response["message"] = message
+
+    return jsonify(response)
+
+
 @app.route("/api/ohlc/<symbol>")
 def get_ohlc_history(symbol):
     ensure_ohlc_table()
@@ -1327,5 +1469,3 @@ except Exception as e:
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=8000)
     import socket
-
-
