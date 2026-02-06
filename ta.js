@@ -19,6 +19,45 @@
     return typeof API_BASE !== 'undefined' ? API_BASE : '';
   }
 
+  function sanitizeSecurityId(input) {
+    const n = parseInt(String(input).trim(), 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function notifyInvalidSecurityId() {
+    const message = 'Please select a valid security before loading technical analysis.';
+    if (typeof window.showToast === 'function') {
+      window.showToast(`❌ ${message}`);
+    } else {
+      window.alert(message);
+    }
+  }
+
+  function buildTaHistoryUrl(securityId) {
+    const sanitized = sanitizeSecurityId(securityId);
+    if (sanitized === null) {
+      notifyInvalidSecurityId();
+      return null;
+    }
+    const base = getApiBase();
+    const url = new URL(`${base}/api/ta/history`, window.location.origin);
+    url.search = new URLSearchParams({ securityId: String(sanitized) }).toString();
+    return url;
+  }
+
+  function buildTaIndicatorsUrl(securityId, indicatorsArray) {
+    const sanitized = sanitizeSecurityId(securityId);
+    if (sanitized === null) {
+      notifyInvalidSecurityId();
+      return null;
+    }
+    const base = getApiBase();
+    const url = new URL(`${base}/api/ta/indicators`, window.location.origin);
+    const indicatorsCsv = (indicatorsArray || []).map((item) => String(item).trim()).filter(Boolean).join(',');
+    url.search = new URLSearchParams({ securityId: String(sanitized), indicators: indicatorsCsv }).toString();
+    return url;
+  }
+
   async function fetchCompanyList() {
     const res = await fetch(`${getApiBase()}/SecurityList`);
     if (!res.ok) throw new Error('Failed to load company list');
@@ -26,13 +65,19 @@
   }
 
   async function fetchTAHistory(securityId) {
-    const res = await fetch(`${getApiBase()}/api/ta/history?securityId=${encodeURIComponent(securityId)}`);
+    const url = buildTaHistoryUrl(securityId);
+    if (!url) throw new Error('Invalid security id');
+    console.info('TA history URL:', url.toString());
+    const res = await fetch(url.toString());
     if (!res.ok) throw new Error('Failed to load TA history');
     return res.json();
   }
 
-  async function fetchTAIndicators(securityId, indicatorsCsv) {
-    const res = await fetch(`${getApiBase()}/api/ta/indicators?securityId=${encodeURIComponent(securityId)}&indicators=${encodeURIComponent(indicatorsCsv)}`);
+  async function fetchTAIndicators(securityId, indicatorsArray) {
+    const url = buildTaIndicatorsUrl(securityId, indicatorsArray);
+    if (!url) throw new Error('Invalid security id');
+    console.info('TA indicators URL:', url.toString());
+    const res = await fetch(url.toString());
     if (!res.ok) throw new Error('Failed to load indicators');
     return res.json();
   }
@@ -146,8 +191,8 @@
   async function updateIndicators() {
     clearOverlays();
     if (!state.currentIndicators.size) return;
-    const csv = Array.from(state.currentIndicators).join(',');
-    const payload = await fetchTAIndicators(state.selectedSecurityId, csv);
+    const indicators = Array.from(state.currentIndicators);
+    const payload = await fetchTAIndicators(state.selectedSecurityId, indicators);
     const series = payload.series || {};
     if (series.sma20) renderOverlayLine('sma20', series.sma20);
     if (series.ema50) renderOverlayLine('ema50', series.ema50);
@@ -215,7 +260,12 @@
   }
 
   function onSecurityChange(securityId) {
-    state.selectedSecurityId = Number(securityId);
+    const sanitized = sanitizeSecurityId(securityId);
+    if (sanitized === null) {
+      notifyInvalidSecurityId();
+      return;
+    }
+    state.selectedSecurityId = sanitized;
     loadHistoryAndRender(state.selectedSecurityId);
   }
 
