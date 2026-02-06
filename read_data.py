@@ -245,13 +245,19 @@ def _normalize_candle_row(raw):
 
 from requests.exceptions import SSLError, RequestException
 
+from requests.exceptions import SSLError, RequestException
+
 def _fetch_nepse_json(path):
+    # Render can't resolve newweb.nepalstock.com.np in your case, so we skip it on purpose.
     bases = [
-        NEPSE_BASE,
         "https://www.nepalstock.com",
         "https://nepalstock.com",
-        "https://newweb.nepalstock.com.np",
     ]
+
+    # Only include NEPSE_BASE if it's NOT the broken newweb host
+    base_env = (NEPSE_BASE or "").strip().rstrip("/")
+    if base_env and "newweb.nepalstock.com.np" not in base_env:
+        bases.insert(0, base_env)
 
     last_err = None
 
@@ -262,7 +268,7 @@ def _fetch_nepse_json(path):
 
         url = f"{base}{path}"
 
-        # 1) Try with verification (best practice)
+        # Try verified first
         try:
             r = requests.get(
                 url,
@@ -273,7 +279,7 @@ def _fetch_nepse_json(path):
             r.raise_for_status()
             return r.json()
         except SSLError:
-            # 2) Fallback: disable verification (matches nepse.setTLSVerification(False))
+            # Fallback: match your nepse.setTLSVerification(False) behavior
             try:
                 r = requests.get(
                     url,
@@ -291,7 +297,6 @@ def _fetch_nepse_json(path):
             continue
 
     raise last_err
-
 
 
 
