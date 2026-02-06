@@ -839,11 +839,12 @@ def getNepseIndexProxy():
         return jsonify(cached)
 
     try:
-        payload = _fetch_nepse_json("/api/nots/nepse-index")
+        payload = nepse.getNepseIndex()
         _cache_set(cache_key, payload)
         return jsonify(payload)
     except Exception as exc:
         return jsonify({"error": "Unable to fetch NEPSE index", "details": str(exc)}), 502
+
 
 
 @app.route("/api/ta/history")
