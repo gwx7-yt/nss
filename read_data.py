@@ -389,8 +389,7 @@ def _get_or_fetch_ta_history(security_id):
     if cached is not None:
         return cached
 
-payload = _fetch_nepse_json(f"/api/nots/market/graphdata/daily/{security_id}/")
-
+    payload = _fetch_nepse_json(f"/api/nots/market/graphdata/daily/{security_id}")
 
     rows = _extract_candles_from_history_payload(payload)
 
