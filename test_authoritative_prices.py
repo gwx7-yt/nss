@@ -19,17 +19,22 @@ from authoritative_prices import AuthoritativePricePublisher, _valid_price_rows
 
 
 class FakeResponse:
+    def __init__(self, error=None):
+        self.error = error
+
     def raise_for_status(self):
-        return None
+        if self.error:
+            raise self.error
 
 
 class FakeSession:
-    def __init__(self):
+    def __init__(self, errors=None):
         self.calls = []
+        self.errors = list(errors or [])
 
     def post(self, url, **kwargs):
         self.calls.append((url, kwargs))
-        return FakeResponse()
+        return FakeResponse(self.errors.pop(0) if self.errors else None)
 
 
 class FakeNepse:
@@ -43,6 +48,11 @@ class FakeNepse:
     def getPriceVolume(self):
         self.price_calls += 1
         return [{"symbol": " nabil ", "lastTradedPrice": "1,234.50"}]
+
+
+class FailingNepse(FakeNepse):
+    def isNepseOpen(self):
+        raise RuntimeError("NEPSE status unavailable")
 
 
 class PublisherTests(unittest.TestCase):
@@ -86,9 +96,16 @@ class PublisherTests(unittest.TestCase):
         session = FakeSession()
         publisher = AuthoritativePricePublisher(FakeNepse(), session)
         self.assertEqual(publisher.publish_authoritative_prices(), 1)
-        payload = session.calls[0][1]["json"]
+        self.assertEqual(len(session.calls), 2)
+        state_payload = session.calls[0][1]["json"]
+        self.assertTrue(state_payload["singleton"])
+        self.assertTrue(state_payload["is_open"])
+        self.assertEqual(state_payload["source"], "render-nepse-feed")
+        self.assertEqual(state_payload["observed_at"], state_payload["updated_at"])
+        payload = session.calls[1][1]["json"]
         self.assertEqual(payload[0]["security_symbol"], "NABIL")
         self.assertEqual(payload[0]["source"], "render-nepse-feed")
+        self.assertTrue(publisher.status()["last_market_open"])
 
     @patch.dict(os.environ, {"SUPABASE_URL": "https://project.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "test-key"})
     def test_closed_market_does_not_fetch_or_refresh_prices(self):
@@ -97,7 +114,50 @@ class PublisherTests(unittest.TestCase):
         publisher = AuthoritativePricePublisher(nepse, session)
         self.assertEqual(publisher.publish_authoritative_prices(), 0)
         self.assertEqual(nepse.price_calls, 0)
+        self.assertEqual(len(session.calls), 1)
+        self.assertIn("authoritative_market_state", session.calls[0][0])
+        self.assertFalse(session.calls[0][1]["json"]["is_open"])
+        self.assertFalse(publisher.status()["last_market_open"])
+
+    @patch.dict(os.environ, {"SUPABASE_URL": "https://project.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "test-key"})
+    def test_unknown_market_state_publishes_nothing(self):
+        nepse = FakeNepse("MAYBE")
+        session = FakeSession()
+        publisher = AuthoritativePricePublisher(nepse, session)
+        self.assertEqual(publisher.publish_authoritative_prices(), 0)
+        self.assertEqual(nepse.price_calls, 0)
         self.assertEqual(session.calls, [])
+        self.assertEqual(publisher.last_result, "market_status_unknown")
+
+    @patch.dict(os.environ, {"SUPABASE_URL": "https://project.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "test-key"})
+    def test_market_state_lookup_failure_publishes_nothing(self):
+        nepse = FailingNepse()
+        session = FakeSession()
+        publisher = AuthoritativePricePublisher(nepse, session)
+        with self.assertRaisesRegex(RuntimeError, "NEPSE status unavailable"):
+            publisher.publish_authoritative_prices()
+        self.assertEqual(nepse.price_calls, 0)
+        self.assertEqual(session.calls, [])
+
+    @patch.dict(os.environ, {"SUPABASE_URL": "https://project.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "test-key"})
+    def test_market_state_supabase_failure_does_not_publish_prices(self):
+        nepse = FakeNepse()
+        session = FakeSession([RuntimeError("Supabase unavailable")])
+        publisher = AuthoritativePricePublisher(nepse, session)
+        with self.assertRaisesRegex(RuntimeError, "Supabase unavailable"):
+            publisher.publish_authoritative_prices()
+        self.assertEqual(nepse.price_calls, 0)
+        self.assertEqual(len(session.calls), 1)
+
+    @patch.dict(os.environ, {"SUPABASE_URL": "https://project.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "secret-value"})
+    @patch("authoritative_prices.time.sleep", side_effect=RuntimeError("stop loop"))
+    def test_loop_redacts_service_key_from_errors(self, _sleep):
+        publisher = AuthoritativePricePublisher(
+            FakeNepse(), FakeSession([RuntimeError("failed secret-value")])
+        )
+        with self.assertRaisesRegex(RuntimeError, "stop loop"):
+            publisher._loop()
+        self.assertNotIn("secret-value", publisher.last_error)
 
 
 if __name__ == "__main__":
