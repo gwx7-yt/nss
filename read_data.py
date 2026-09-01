@@ -16,6 +16,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests, certifi
 
+from authoritative_prices import AuthoritativePricePublisher
+
 
 
 from nepse import Nepse
@@ -25,6 +27,10 @@ CORS(app)
 
 nepse = Nepse()
 nepse.setTLSVerification(False)
+
+# The service-role credential stays exclusively in this server process.  The
+# publisher accepts no browser-provided prices and fails closed when unconfigured.
+authoritative_price_publisher = AuthoritativePricePublisher(nepse)
 
 NEPSE_BASE = os.environ.get("NEPSE_BASE", "https://www.nepalstock.com").rstrip("/")
 NEPSE_DEFAULT_HEADERS = {
@@ -858,6 +864,12 @@ def getIndex():
     return f"Serving hot stock data <BR>{content}"
 
 
+@app.route("/authoritative-prices/status")
+def authoritativePriceStatus():
+    """Non-sensitive operational state; this endpoint cannot trigger a publish."""
+    return jsonify(authoritative_price_publisher.status())
+
+
 @app.route(routes["Summary"])
 def getSummary():
     return jsonify(_getSummary())
@@ -1465,7 +1477,11 @@ try:
 except Exception as e:
     print("init_db failed at startup:", str(e))
 
+# Every Gunicorn worker imports this module. A host-wide file lock elects exactly
+# one worker as publisher; the other workers remain HTTP-only standbys.
+authoritative_price_publisher.start()
+
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=8000)
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", host="0.0.0.0", port=8000)
     import socket
