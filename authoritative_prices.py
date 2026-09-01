@@ -5,6 +5,7 @@ does not expose a function that accepts caller-supplied price rows.
 """
 
 from datetime import datetime, timezone
+import fcntl
 import logging
 import math
 import os
@@ -17,6 +18,7 @@ import requests
 LOGGER = logging.getLogger(__name__)
 PUBLISH_INTERVAL_SECONDS = 120
 SOURCE = "render-nepse-feed"
+DEFAULT_LOCK_PATH = "/tmp/arthyq-authoritative-price-publisher.lock"
 
 
 def _market_is_open(status):
@@ -76,6 +78,23 @@ class AuthoritativePricePublisher:
         self.last_result = "not_started"
         self._start_lock = threading.Lock()
         self._started = False
+        self._leader_lock_file = None
+
+    def _claim_process_leadership(self):
+        """Claim a host-wide non-blocking lock shared by Gunicorn workers."""
+        lock_path = os.environ.get(
+            "AUTHORITATIVE_PRICE_LOCK_PATH", DEFAULT_LOCK_PATH
+        )
+        lock_file = open(lock_path, "a+", encoding="utf-8")
+        try:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            lock_file.close()
+            return False
+        # Keeping the descriptor open retains the exclusive lock for this
+        # process. The OS releases it automatically if the process exits.
+        self._leader_lock_file = lock_file
+        return True
 
     def publish_authoritative_prices(self):
         """Publish one batch, but only while NEPSE explicitly reports OPEN."""
@@ -131,6 +150,12 @@ class AuthoritativePricePublisher:
             if self._started or not self.configured:
                 if not self.configured:
                     LOGGER.warning("Authoritative price publisher is not configured")
+                return False
+            if not self._claim_process_leadership():
+                self.last_result = "standby_worker"
+                LOGGER.info(
+                    "Authoritative price publisher is running in another worker"
+                )
                 return False
             self._started = True
             threading.Thread(

@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import types
 import unittest
 from unittest.mock import patch
@@ -50,6 +51,22 @@ class PublisherTests(unittest.TestCase):
         publisher = AuthoritativePricePublisher(FakeNepse(), FakeSession())
         self.assertFalse(publisher.configured)
         self.assertFalse(publisher.start())
+
+    @patch("authoritative_prices.threading.Thread")
+    def test_only_one_worker_can_become_publisher(self, thread_class):
+        with tempfile.TemporaryDirectory() as directory:
+            environment = {
+                "SUPABASE_URL": "https://project.supabase.co",
+                "SUPABASE_SERVICE_ROLE_KEY": "test-key",
+                "AUTHORITATIVE_PRICE_LOCK_PATH": os.path.join(directory, "publisher.lock"),
+            }
+            with patch.dict(os.environ, environment, clear=True):
+                leader = AuthoritativePricePublisher(FakeNepse(), FakeSession())
+                standby = AuthoritativePricePublisher(FakeNepse(), FakeSession())
+                self.assertTrue(leader.start())
+                self.assertFalse(standby.start())
+                self.assertEqual(standby.last_result, "standby_worker")
+                self.assertEqual(thread_class.call_count, 1)
 
     def test_invalid_prices_are_skipped(self):
         stocks = [

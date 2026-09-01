@@ -1477,8 +1477,8 @@ try:
 except Exception as e:
     print("init_db failed at startup:", str(e))
 
-# Gunicorn imports this module once per worker process. The publisher itself has
-# a process-local lock, so repeated startup calls cannot create duplicate threads.
+# Every Gunicorn worker imports this module. A host-wide file lock elects exactly
+# one worker as publisher; the other workers remain HTTP-only standbys.
 authoritative_price_publisher.start()
 
 
