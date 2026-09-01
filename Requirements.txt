@@ -13,4 +13,4 @@ tqdm==4.66.5
 pywasm==1.2.2
 setuptools>=69.0.0
 
-git+https://github.com/basic-bgnr/NepseUnofficialApi.git
+git+https://github.com/basic-bgnr/NepseUnofficialApi.git@1565b0f83cfd9a1be9fb4a0cf730e8e3102fc122
